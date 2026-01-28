@@ -1,112 +1,61 @@
 from flask import Flask, render_template, jsonify, request, send_from_directory
 from flask_cors import CORS
-import numpy as np
-import io
-import base64
+import math
 import json
 import time
-from scipy import signal  # Use scipy for filtering instead
+import os
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 
-# Serve static files
+# ========== STATIC FILE ROUTES (MUST COME FIRST) ==========
 @app.route('/static/<path:path>')
 def serve_static(path):
     return send_from_directory('static', path)
 
-class AudioFilter:
-    def __init__(self):
-        self.sample_rate = 44100
-        
-    def apply_filter(self, audio_data, filter_type='lowpass', cutoff=1000, resonance=0.7):
-        """Apply various audio filters using scipy"""
-        nyquist = self.sample_rate / 2
-        normalized_cutoff = cutoff / nyquist
-        
-        if filter_type == 'lowpass':
-            b, a = signal.butter(4, normalized_cutoff, btype='low')
-        elif filter_type == 'highpass':
-            b, a = signal.butter(4, normalized_cutoff, btype='high')
-        elif filter_type == 'bandpass':
-            b, a = signal.butter(4, [normalized_cutoff*0.9, normalized_cutoff*1.1], btype='band')
-        else:
-            return audio_data
-            
-        filtered = signal.filtfilt(b, a, audio_data)
-        return filtered
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory('static', 'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
-class LFO:
-    def __init__(self, sample_rate=44100):
-        self.sample_rate = sample_rate
-        self.phase = 0
-        
-    def generate(self, frequency, waveform='sine', depth=1.0, length=None):
-        """Generate LFO signal"""
-        if length is None:
-            length = int(self.sample_rate)
-        
-        t = np.arange(length) / self.sample_rate
-        
-        if waveform == 'sine':
-            signal = np.sin(2 * np.pi * frequency * t + self.phase)
-        elif waveform == 'triangle':
-            signal = 2 * np.abs(2 * (frequency * t - np.floor(frequency * t + 0.5))) - 1
-        elif waveform == 'square':
-            signal = np.sign(np.sin(2 * np.pi * frequency * t + self.phase))
-        elif waveform == 'sawtooth':
-            signal = 2 * (frequency * t - np.floor(frequency * t + 0.5))
-        else:
-            signal = np.zeros(length)
-        
-        self.phase += 2 * np.pi * frequency * length / self.sample_rate
-        return signal * depth
-
-audio_filter = AudioFilter()
-lfo = LFO()
-
-@app.route('/')
-def index():
-    return render_template('index.html')
+# ========== API ROUTES ==========
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'ok',
+        'message': 'Audio Filter PWA is running',
+        'timestamp': time.time(),
+        'version': '1.0.0'
+    })
 
 @app.route('/api/generate_waveform', methods=['POST'])
 def generate_waveform():
-    """Generate audio waveform for visualization"""
+    """Generate audio waveform for visualization without numpy"""
     try:
         data = request.json
         freq = data.get('frequency', 440)
         duration = data.get('duration', 1.0)
+        samples = int(44100 * duration)
         
         # Generate sine wave
-        t = np.linspace(0, duration, int(44100 * duration))
-        waveform = np.sin(2 * np.pi * freq * t)
+        waveform = []
+        for i in range(min(1000, samples)):  # Only first 1000 points
+            t = i / 44100
+            value = math.sin(2 * math.pi * freq * t)
+            waveform.append(value)
         
         # Apply LFO if requested
         if data.get('lfo_enabled', False):
-            lfo_signal = lfo.generate(
+            lfo_signal = LFO().generate(
                 data.get('lfo_freq', 5),
                 data.get('lfo_waveform', 'sine'),
                 data.get('lfo_depth', 0.5),
                 len(waveform)
             )
-            waveform = waveform * (1 + lfo_signal * 0.5)
-        
-        # Apply filter if requested
-        filter_type = data.get('filter_type', 'lowpass')
-        if filter_type != 'none':
-            filtered = audio_filter.apply_filter(
-                waveform,
-                filter_type,
-                data.get('cutoff_freq', 1000),
-                data.get('resonance', 0.7)
-            )
-            waveform = filtered
-        
-        # Convert to list for JSON response
-        points = waveform[:1000].tolist()  # First 1000 points for visualization
+            waveform = [w * (1 + l * 0.5) for w, l in zip(waveform, lfo_signal)]
         
         return jsonify({
-            'waveform': points,
+            'waveform': waveform,
             'sampling_rate': 44100
         })
         
@@ -118,17 +67,18 @@ def process_audio():
     """Process audio data with filters"""
     try:
         data = request.json
-        audio_data = np.array(data.get('audio_data', []))
+        audio_data = data.get('audio_data', [])
         
-        if len(audio_data) == 0:
+        if not audio_data:
             # Generate test audio if none provided
             duration = data.get('duration', 1.0)
             freq = data.get('frequency', 440)
-            t = np.linspace(0, duration, int(44100 * duration))
-            audio_data = np.sin(2 * np.pi * freq * t)
+            samples = int(44100 * duration)
+            audio_data = [math.sin(2 * math.pi * freq * (i/44100)) 
+                         for i in range(min(1000, samples))]
         
         # Apply filter
-        filtered = audio_filter.apply_filter(
+        filtered = AudioFilter().apply_filter(
             audio_data,
             data.get('filter_type', 'lowpass'),
             data.get('cutoff_freq', 1000),
@@ -137,18 +87,22 @@ def process_audio():
         
         # Apply LFO modulation if enabled
         if data.get('lfo_enabled', False):
-            lfo_signal = lfo.generate(
+            lfo_signal = LFO().generate(
                 data.get('lfo_freq', 5),
                 data.get('lfo_waveform', 'sine'),
                 data.get('lfo_depth', 0.5),
                 len(filtered)
             )
-            filtered = filtered * (1 + lfo_signal * 0.3)
+            filtered = [f * (1 + l * 0.3) for f, l in zip(filtered, lfo_signal)]
+        
+        # Calculate RMS
+        original_rms = math.sqrt(sum(x*x for x in audio_data) / len(audio_data)) if audio_data else 0
+        processed_rms = math.sqrt(sum(x*x for x in filtered) / len(filtered)) if filtered else 0
         
         return jsonify({
-            'processed_audio': filtered.tolist(),
-            'original_rms': float(np.sqrt(np.mean(audio_data**2))),
-            'processed_rms': float(np.sqrt(np.mean(filtered**2)))
+            'processed_audio': filtered,
+            'original_rms': original_rms,
+            'processed_rms': processed_rms
         })
         
     except Exception as e:
@@ -163,19 +117,25 @@ def synthesize():
         duration = data.get('duration', 1.0)
         waveform_type = data.get('waveform', 'sine')
         
-        t = np.linspace(0, duration, int(44100 * duration))
+        samples = int(44100 * duration)
+        audio = []
         
-        # Generate different waveforms
-        if waveform_type == 'sine':
-            audio = np.sin(2 * np.pi * freq * t)
-        elif waveform_type == 'square':
-            audio = np.sign(np.sin(2 * np.pi * freq * t))
-        elif waveform_type == 'sawtooth':
-            audio = 2 * (t * freq - np.floor(t * freq + 0.5))
-        elif waveform_type == 'triangle':
-            audio = 2 * np.abs(2 * (t * freq - np.floor(t * freq + 0.5))) - 1
-        else:
-            audio = np.zeros_like(t)
+        # Generate waveform
+        for i in range(min(samples, 10000)):  # Limit to 10000 samples max
+            t = i / 44100
+            
+            if waveform_type == 'sine':
+                value = math.sin(2 * math.pi * freq * t)
+            elif waveform_type == 'square':
+                value = 1.0 if math.sin(2 * math.pi * freq * t) >= 0 else -1.0
+            elif waveform_type == 'sawtooth':
+                value = 2 * (freq * t - math.floor(freq * t + 0.5))
+            elif waveform_type == 'triangle':
+                value = 2 * abs(2 * (freq * t - math.floor(freq * t + 0.5))) - 1
+            else:
+                value = 0
+                
+            audio.append(value)
         
         # Apply ADSR envelope
         attack = min(0.1, duration * 0.1)
@@ -187,48 +147,137 @@ def synthesize():
         attack_samples = int(attack * 44100)
         decay_samples = int(decay * 44100)
         release_samples = int(release * 44100)
-        sustain_samples = len(t) - attack_samples - decay_samples - release_samples
+        sustain_samples = len(audio) - attack_samples - decay_samples - release_samples
         
-        envelope = np.ones(len(t))
-        
-        if attack_samples > 0:
-            envelope[:attack_samples] = np.linspace(0, 1, attack_samples)
-        if decay_samples > 0:
-            envelope[attack_samples:attack_samples+decay_samples] = np.linspace(1, sustain_level, decay_samples)
-        if sustain_samples > 0:
-            envelope[attack_samples+decay_samples:attack_samples+decay_samples+sustain_samples] = sustain_level
-        if release_samples > 0:
-            envelope[-release_samples:] = np.linspace(sustain_level, 0, release_samples)
-        
-        audio = audio * envelope
+        # Apply envelope
+        for i in range(len(audio)):
+            if i < attack_samples:
+                envelope = i / attack_samples if attack_samples > 0 else 1
+            elif i < attack_samples + decay_samples:
+                envelope = 1 - (1 - sustain_level) * (i - attack_samples) / decay_samples if decay_samples > 0 else sustain_level
+            elif i < attack_samples + decay_samples + sustain_samples:
+                envelope = sustain_level
+            else:
+                release_idx = i - (attack_samples + decay_samples + sustain_samples)
+                envelope = sustain_level * (1 - release_idx / release_samples) if release_samples > 0 else 0
+            
+            audio[i] = audio[i] * envelope
         
         # Normalize
-        max_val = np.max(np.abs(audio))
+        max_val = max(abs(x) for x in audio) if audio else 0
         if max_val > 0:
-            audio = audio / max_val
+            audio = [x / max_val for x in audio]
         
         return jsonify({
-            'audio': audio.tolist(),
+            'audio': audio[:1000],  # First 1000 samples
             'sample_rate': 44100,
             'duration': duration,
-            'max_amplitude': float(max_val) if max_val > 0 else 0
+            'max_amplitude': max_val
         })
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    """Health check endpoint for Vercel"""
-    return jsonify({
-        'status': 'ok',
-        'message': 'Audio Filter PWA is running',
-        'timestamp': time.time()
-    })
+# ========== CLASS DEFINITIONS ==========
+class AudioFilter:
+    def __init__(self):
+        self.sample_rate = 44100
+        
+    def apply_filter(self, audio_data, filter_type='lowpass', cutoff=1000, resonance=0.7):
+        """Simple filter implementation without numpy"""
+        if not audio_data:
+            return audio_data
+            
+        filtered = []
+        
+        if filter_type == 'lowpass':
+            # Simple RC low-pass filter
+            rc = 1.0 / (cutoff * 2 * math.pi)
+            dt = 1.0 / self.sample_rate
+            alpha = dt / (rc + dt)
+            
+            y_prev = audio_data[0]
+            for sample in audio_data:
+                y = y_prev + alpha * (sample - y_prev)
+                filtered.append(y)
+                y_prev = y
+                
+        elif filter_type == 'highpass':
+            # Simple RC high-pass filter
+            rc = 1.0 / (cutoff * 2 * math.pi)
+            dt = 1.0 / self.sample_rate
+            alpha = rc / (rc + dt)
+            
+            y_prev = audio_data[0]
+            x_prev = audio_data[0]
+            for sample in audio_data:
+                y = alpha * (y_prev + sample - x_prev)
+                filtered.append(y)
+                y_prev = y
+                x_prev = sample
+                
+        else:
+            # For other filters, return as-is for now
+            filtered = audio_data[:]
+            
+        return filtered
 
-# Required for Vercel
+class LFO:
+    def __init__(self, sample_rate=44100):
+        self.sample_rate = sample_rate
+        self.phase = 0
+        
+    def generate(self, frequency, waveform='sine', depth=1.0, length=1000):
+        """Generate LFO signal without numpy"""
+        signal = []
+        for i in range(length):
+            t = i / self.sample_rate
+            angle = 2 * math.pi * frequency * t + self.phase
+            
+            if waveform == 'sine':
+                value = math.sin(angle)
+            elif waveform == 'triangle':
+                frac = frequency * t - math.floor(frequency * t)
+                if frac < 0.25:
+                    value = 4 * frac
+                elif frac < 0.75:
+                    value = 2 - 4 * frac
+                else:
+                    value = 4 * frac - 4
+            elif waveform == 'square':
+                value = 1.0 if math.sin(angle) >= 0 else -1.0
+            elif waveform == 'sawtooth':
+                value = 2 * (frequency * t - math.floor(frequency * t + 0.5))
+            else:
+                value = 0
+                
+            signal.append(value * depth)
+        
+        self.phase += 2 * math.pi * frequency * length / self.sample_rate
+        return signal
+
+# ========== MAIN APP ROUTE (MUST COME LAST) ==========
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def catch_all(path):
+    """Catch-all route for SPA - MUST BE LAST"""
+    if path and os.path.exists(os.path.join(app.template_folder, path)):
+        return render_template(path)
+    return render_template('index.html')
+
+# ========== ERROR HANDLERS ==========
+@app.errorhandler(404)
+def not_found(e):
+    return render_template('index.html'), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    return jsonify({'error': 'Internal server error', 'message': str(e)}), 500
+
+# ========== APPLICATION ENTRY POINT ==========
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080, debug=True)
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port, debug=True)
 else:
-    # This is needed for Vercel serverless
+    # For Vercel serverless
     application = app
