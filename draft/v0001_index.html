@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Filter PWA</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-wave-square"></i> Audio Filter PWA</h1>
+            <p class="subtitle">Real-time Audio Processing with LFO Modulation</p>
+        </header>
+
+        <div class="main-content">
+            <div class="waveform-container">
+                <canvas id="waveformCanvas" width="800" height="200"></canvas>
+                <div class="waveform-controls">
+                    <button id="playBtn" class="btn"><i class="fas fa-play"></i> Play</button>
+                    <button id="stopBtn" class="btn"><i class="fas fa-stop"></i> Stop</button>
+                    <button id="generateBtn" class="btn"><i class="fas fa-sync-alt"></i> Generate</button>
+                </div>
+            </div>
+
+            <div class="controls-grid">
+                <div class="control-panel">
+                    <h3><i class="fas fa-sliders-h"></i> Basic Controls</h3>
+                    
+                    <div class="control-group">
+                        <label for="frequency">Frequency: <span id="frequencyValue">440 Hz</span></label>
+                        <input type="range" id="frequency" min="20" max="2000" value="440" step="1">
+                    </div>
+
+                    <div class="control-group">
+                        <label for="filterType">Filter Type:</label>
+                        <select id="filterType" class="dropdown">
+                            <option value="lowpass">Low Pass</option>
+                            <option value="highpass">High Pass</option>
+                            <option value="bandpass">Band Pass</option>
+                        </select>
+                    </div>
+
+                    <button id="testBtn" class="btn btn-primary">
+                        <i class="fas fa-bolt"></i> Test API
+                    </button>
+                </div>
+
+                <div class="control-panel">
+                    <h3><i class="fas fa-wave-circle"></i> LFO Controls</h3>
+                    
+                    <div class="control-group">
+                        <label class="toggle">
+                            <input type="checkbox" id="lfoEnabled">
+                            <span class="toggle-slider"></span>
+                            Enable LFO
+                        </label>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="lfoFreq">LFO Frequency: <span id="lfoFreqValue">5 Hz</span></label>
+                        <input type="range" id="lfoFreq" min="0.1" max="20" value="5" step="0.1">
+                    </div>
+                </div>
+
+                <div class="control-panel">
+                    <h3><i class="fas fa-info-circle"></i> Status</h3>
+                    <div id="status" class="status-box">
+                        <p>Ready to generate audio</p>
+                        <p id="apiStatus">API: Checking...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="audio-visualizer">
+                <h3><i class="fas fa-chart-line"></i> Audio Visualizer</h3>
+                <canvas id="visualizerCanvas" width="800" height="150"></canvas>
+            </div>
+        </div>
+
+        <footer>
+            <p>Audio Filter PWA v1.0 | Made with Python & Flask</p>
+            <button id="installBtn" class="btn btn-secondary">
+                <i class="fas fa-download"></i> Install App
+            </button>
+        </footer>
+    </div>
+
+    <script>
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Audio Filter PWA loaded');
+            
+            // Initialize canvases
+            const waveformCanvas = document.getElementById('waveformCanvas');
+            const visualizerCanvas = document.getElementById('visualizerCanvas');
+            const waveformCtx = waveformCanvas.getContext('2d');
+            const visualizerCtx = visualizerCanvas.getContext('2d');
+            
+            // Set canvas sizes
+            waveformCanvas.width = waveformCanvas.offsetWidth;
+            waveformCanvas.height = waveformCanvas.offsetHeight;
+            visualizerCanvas.width = visualizerCanvas.offsetWidth;
+            visualizerCanvas.height = visualizerCanvas.offsetHeight;
+            
+            // Update UI values
+            function updateUIValues() {
+                document.getElementById('frequencyValue').textContent = 
+                    document.getElementById('frequency').value + ' Hz';
+                document.getElementById('lfoFreqValue').textContent = 
+                    document.getElementById('lfoFreq').value + ' Hz';
+            }
+            
+            // Test API connection
+            async function testAPI() {
+                try {
+                    const response = await fetch('/api/health');
+                    const data = await response.json();
+                    document.getElementById('apiStatus').textContent = 'API: ✅ Connected';
+                    document.getElementById('apiStatus').style.color = 'green';
+                    return true;
+                } catch (error) {
+                    document.getElementById('apiStatus').textContent = 'API: ❌ Failed - ' + error.message;
+                    document.getElementById('apiStatus').style.color = 'red';
+                    return false;
+                }
+            }
+            
+            // Generate waveform
+            async function generateWaveform() {
+                const frequency = document.getElementById('frequency').value;
+                const status = document.getElementById('status');
+                
+                status.innerHTML = '<p>Generating waveform...</p>';
+                
+                try {
+                    const response = await fetch('/api/generate', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            frequency: parseFloat(frequency),
+                            duration: 1.0
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success && data.waveform) {
+                        drawWaveform(data.waveform);
+                        status.innerHTML = `<p>✅ Generated ${data.samples} samples at ${data.frequency} Hz</p>`;
+                    } else {
+                        status.innerHTML = `<p>❌ Error: ${data.error || 'Unknown error'}</p>`;
+                    }
+                } catch (error) {
+                    status.innerHTML = `<p>❌ Network error: ${error.message}</p>`;
+                }
+            }
+            
+            // Draw waveform on canvas
+            function drawWaveform(waveformData) {
+                const ctx = waveformCtx;
+                const width = waveformCanvas.width;
+                const height = waveformCanvas.height;
+                
+                // Clear canvas
+                ctx.clearRect(0, 0, width, height);
+                
+                // Draw grid
+                ctx.strokeStyle = '#e0e0e0';
+                ctx.lineWidth = 1;
+                
+                // Horizontal lines
+                for (let i = 0; i <= 4; i++) {
+                    const y = (height / 4) * i;
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(width, y);
+                    ctx.stroke();
+                }
+                
+                // Draw waveform
+                ctx.strokeStyle = '#667eea';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                
+                const step = width / waveformData.length;
+                
+                for (let i = 0; i < waveformData.length; i++) {
+                    const x = i * step;
+                    const y = (1 - (waveformData[i] + 1) / 2) * height;
+                    
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                
+                ctx.stroke();
+                
+                // Draw zero line
+                ctx.strokeStyle = '#764ba2';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(0, height / 2);
+                ctx.lineTo(width, height / 2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            
+            // Simple visualizer animation
+            function drawVisualizer() {
+                const ctx = visualizerCtx;
+                const width = visualizerCanvas.width;
+                const height = visualizerCanvas.height;
+                
+                ctx.clearRect(0, 0, width, height);
+                
+                // Draw some bars for demo
+                const barCount = 32;
+                const barWidth = width / barCount;
+                
+                for (let i = 0; i < barCount; i++) {
+                    const barHeight = Math.random() * height * 0.8;
+                    const x = i * barWidth;
+                    
+                    const gradient = ctx.createLinearGradient(0, height - barHeight, 0, height);
+                    gradient.addColorStop(0, '#667eea');
+                    gradient.addColorStop(1, '#764ba2');
+                    
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(x + 2, height - barHeight, barWidth - 4, barHeight);
+                }
+                
+                requestAnimationFrame(drawVisualizer);
+            }
+            
+            // Event listeners
+            document.getElementById('frequency').addEventListener('input', updateUIValues);
+            document.getElementById('lfoFreq').addEventListener('input', updateUIValues);
+            
+            document.getElementById('generateBtn').addEventListener('click', generateWaveform);
+            document.getElementById('testBtn').addEventListener('click', testAPI);
+            
+            document.getElementById('playBtn').addEventListener('click', function() {
+                document.getElementById('status').innerHTML = '<p>🎵 Playing audio...</p>';
+            });
+            
+            document.getElementById('stopBtn').addEventListener('click', function() {
+                document.getElementById('status').innerHTML = '<p>⏹️ Audio stopped</p>';
+            });
+            
+            // Initialize
+            updateUIValues();
+            testAPI();
+            drawVisualizer();
+            
+            // Generate initial waveform
+            setTimeout(generateWaveform, 1000);
+        });
+    </script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
