@@ -1,10 +1,10 @@
 {
-  "builds": [
-    {
-      "src": "app.py",
-      "use": "@vercel/python"
+  "functions": {
+    "app.py": {
+      "maxDuration": 10,
+      "runtime": "python@3.9"
     }
-  ],
+  },
   "rewrites": [
     {
       "source": "/(.*)",
