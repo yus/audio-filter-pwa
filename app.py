@@ -131,6 +131,23 @@ def debug_info():
         'template_files': os.listdir('templates') if os.path.exists('templates') else [],
         'static_files': os.listdir('static') if os.path.exists('static') else []
     })
+            
+# ========== TEST ENDPOINT =========
+@app.route('/test')
+def test():
+    return """
+    <html>
+        <head><title>Test Page</title></head>
+        <body>
+            <h1>Flask is working!</h1>
+            <p>If you see this, Flask is running correctly.</p>
+            <p><a href="/">Go to main app</a></p>
+            <p><a href="/debug">Debug info</a></p>
+            <p><a href="/api/health">API Health</a></p>
+        </body>
+    </html>
+    """
+
 
 # ========== APPLICATION START ==========
 if __name__ == '__main__':
