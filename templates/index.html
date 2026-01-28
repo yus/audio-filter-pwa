@@ -110,6 +110,114 @@
                 </div>
             </div>
 
+            <!-- Add this section after the controls-grid div -->
+<div class="audio-io-controls">
+    <div class="control-panel">
+        <h3><i class="fas fa-microphone"></i> Audio Input</h3>
+        
+        <div class="control-group">
+            <button id="recordBtn" class="btn btn-record">
+                <i class="fas fa-circle"></i> Record
+            </button>
+            <button id="stopRecordBtn" class="btn btn-stop" disabled>
+                <i class="fas fa-stop"></i> Stop
+            </button>
+        </div>
+        
+        <div class="control-group">
+            <label for="inputSource">Input Source:</label>
+            <select id="inputSource" class="dropdown">
+                <option value="mic">Microphone</option>
+                <option value="synth">Synthesizer</option>
+                <option value="file">Audio File</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label for="inputGain">Input Gain: <span id="inputGainValue">1.0</span></label>
+            <input type="range" id="inputGain" min="0" max="2" value="1.0" step="0.1">
+        </div>
+        
+        <div class="control-group">
+            <input type="file" id="audioUpload" accept="audio/*" style="display: none;">
+            <button id="uploadBtn" class="btn btn-secondary">
+                <i class="fas fa-upload"></i> Upload Audio
+            </button>
+        </div>
+    </div>
+    
+    <div class="control-panel">
+        <h3><i class="fas fa-sliders-h"></i> Mixer Controls</h3>
+        
+        <div class="control-group">
+            <label for="volume">Volume: <span id="volumeValue">0.8</span></label>
+            <input type="range" id="volume" min="0" max="1" value="0.8" step="0.05">
+        </div>
+        
+        <div class="control-group">
+            <label for="pan">Pan: <span id="panValue">0.0</span></label>
+            <input type="range" id="pan" min="-1" max="1" value="0" step="0.1">
+        </div>
+        
+        <div class="control-group">
+            <label for="reverbSend">Reverb Send: <span id="reverbSendValue">0.2</span></label>
+            <input type="range" id="reverbSend" min="0" max="1" value="0.2" step="0.05">
+        </div>
+        
+        <div class="control-group">
+            <label for="delaySend">Delay Send: <span id="delaySendValue">0.1</span></label>
+            <input type="range" id="delaySend" min="0" max="1" value="0.1" step="0.05">
+        </div>
+    </div>
+    
+    <div class="control-panel">
+        <h3><i class="fas fa-save"></i> Save & Export</h3>
+        
+        <div class="control-group">
+            <input type="text" id="projectName" class="text-input" 
+                   placeholder="Project Name" value="My Audio Project">
+        </div>
+        
+        <div class="control-group">
+            <button id="saveBtn" class="btn btn-success">
+                <i class="fas fa-save"></i> Save Project
+            </button>
+            <button id="loadBtn" class="btn btn-secondary">
+                <i class="fas fa-folder-open"></i> Load Project
+            </button>
+        </div>
+        
+        <div class="control-group">
+            <button id="exportWavBtn" class="btn btn-primary">
+                <i class="fas fa-file-audio"></i> Export WAV
+            </button>
+            <button id="exportMp3Btn" class="btn btn-primary">
+                <i class="fas fa-file-audio"></i> Export MP3
+            </button>
+        </div>
+        
+        <div class="control-group">
+            <div id="saveStatus" class="status-message"></div>
+        </div>
+        
+        <div class="control-group">
+            <h4>Recent Projects</h4>
+            <ul id="projectList" class="project-list">
+                <!-- Projects will be loaded here -->
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Add this modal for project management -->
+<div id="projectModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal">&times;</span>
+        <h3>Load Project</h3>
+        <div id="modalProjectList"></div>
+    </div>
+</div>
+
             <div class="audio-visualizer">
                 <h3><i class="fas fa-chart-line"></i> Audio Visualizer</h3>
                 <canvas id="visualizerCanvas"></canvas>
