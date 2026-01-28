@@ -1,18 +1,21 @@
 {
-  "builds": [
-    {
-      "src": "app.py",
-      "use": "@vercel/python"
+  "functions": {
+    "app.py": {
+      "maxDuration": 10
     }
-  ],
-  "routes": [
+  },
+  "rewrites": [
     {
-      "src": "/static/(.*)",
+      "source": "/api/(.*)",
+      "destination": "/app.py"
+    },
+    {
+      "source": "/static/(.*)",
       "dest": "/static/$1"
     },
     {
-      "src": "/(.*)",
-      "dest": "/app.py"
+      "source": "/(.*)",
+      "destination": "/app.py"
     }
   ]
 }
