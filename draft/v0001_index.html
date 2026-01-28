@@ -7,27 +7,58 @@
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <meta name="theme-color" content="#667eea">
 </head>
 <body>
     <div class="container">
         <header>
             <h1><i class="fas fa-wave-square"></i> Audio Filter PWA</h1>
             <p class="subtitle">Real-time Audio Processing with LFO Modulation</p>
+            <div class="status-bar">
+                <span id="connectionStatus">🟡 Connecting...</span>
+                <span id="pwaStatus" class="pwa-indicator">📱 PWA Ready</span>
+            </div>
         </header>
 
         <div class="main-content">
+            <!-- Audio Input Section -->
+            <div class="control-panel">
+                <h3><i class="fas fa-microphone"></i> Audio Input</h3>
+                <div class="button-group">
+                    <button id="recordBtn" class="btn">
+                        <i class="fas fa-circle"></i> Record
+                    </button>
+                    <button id="stopRecordBtn" class="btn" disabled>
+                        <i class="fas fa-stop"></i> Stop
+                    </button>
+                    <button id="uploadBtn" class="btn">
+                        <i class="fas fa-upload"></i> Upload Audio
+                    </button>
+                    <input type="file" id="audioUpload" accept="audio/*" style="display: none;">
+                </div>
+                <div class="visualizer-container">
+                    <canvas id="inputVisualizer"></canvas>
+                    <div class="visualizer-label">Input</div>
+                </div>
+            </div>
+
+            <!-- Waveform Display -->
             <div class="waveform-container">
-                <canvas id="waveformCanvas" width="800" height="200"></canvas>
+                <h3><i class="fas fa-waveform"></i> Waveform</h3>
+                <canvas id="waveformCanvas"></canvas>
                 <div class="waveform-controls">
                     <button id="playBtn" class="btn"><i class="fas fa-play"></i> Play</button>
                     <button id="stopBtn" class="btn"><i class="fas fa-stop"></i> Stop</button>
                     <button id="generateBtn" class="btn"><i class="fas fa-sync-alt"></i> Generate</button>
+                    <button id="downloadBtn" class="btn"><i class="fas fa-download"></i> Download</button>
                 </div>
             </div>
 
+            <!-- Controls Grid -->
             <div class="controls-grid">
+                <!-- Synthesizer Controls -->
                 <div class="control-panel">
-                    <h3><i class="fas fa-sliders-h"></i> Basic Controls</h3>
+                    <h3><i class="fas fa-sliders-h"></i> Synthesizer</h3>
                     
                     <div class="control-group">
                         <label for="frequency">Frequency: <span id="frequencyValue">440 Hz</span></label>
@@ -35,235 +66,116 @@
                     </div>
 
                     <div class="control-group">
-                        <label for="filterType">Filter Type:</label>
+                        <label for="duration">Duration: <span id="durationValue">1.0 s</span></label>
+                        <input type="range" id="duration" min="0.1" max="5" value="1.0" step="0.1">
+                    </div>
+
+                    <div class="control-group">
+                        <label for="waveform">Waveform:</label>
+                        <select id="waveform" class="dropdown">
+                            <option value="sine">Sine</option>
+                            <option value="square">Square</option>
+                            <option value="sawtooth">Sawtooth</option>
+                            <option value="triangle">Triangle</option>
+                        </select>
+                    </div>
+
+                    <button id="synthesizeBtn" class="btn btn-primary">
+                        <i class="fas fa-bolt"></i> Synthesize
+                    </button>
+                </div>
+
+                <!-- Filter Controls -->
+                <div class="control-panel">
+                    <h3><i class="fas fa-filter"></i> Filter</h3>
+                    
+                    <div class="control-group">
+                        <label for="filterType">Type:</label>
                         <select id="filterType" class="dropdown">
                             <option value="lowpass">Low Pass</option>
                             <option value="highpass">High Pass</option>
                             <option value="bandpass">Band Pass</option>
+                            <option value="none">None</option>
                         </select>
                     </div>
 
-                    <button id="testBtn" class="btn btn-primary">
-                        <i class="fas fa-bolt"></i> Test API
-                    </button>
+                    <div class="control-group">
+                        <label for="cutoffFreq">Cutoff: <span id="cutoffValue">1000 Hz</span></label>
+                        <input type="range" id="cutoffFreq" min="20" max="20000" value="1000" step="10">
+                    </div>
+
+                    <div class="control-group">
+                        <label for="resonance">Resonance: <span id="resonanceValue">0.7</span></label>
+                        <input type="range" id="resonance" min="0.1" max="5.0" value="0.7" step="0.1">
+                    </div>
                 </div>
 
+                <!-- LFO Controls -->
                 <div class="control-panel">
-                    <h3><i class="fas fa-wave-circle"></i> LFO Controls</h3>
+                    <h3><i class="fas fa-wave-circle"></i> LFO Modulation</h3>
                     
                     <div class="control-group">
                         <label class="toggle">
-                            <input type="checkbox" id="lfoEnabled">
+                            <input type="checkbox" id="lfoEnabled" checked>
                             <span class="toggle-slider"></span>
                             Enable LFO
                         </label>
                     </div>
 
                     <div class="control-group">
-                        <label for="lfoFreq">LFO Frequency: <span id="lfoFreqValue">5 Hz</span></label>
+                        <label for="lfoFreq">Frequency: <span id="lfoFreqValue">5 Hz</span></label>
                         <input type="range" id="lfoFreq" min="0.1" max="20" value="5" step="0.1">
                     </div>
-                </div>
 
-                <div class="control-panel">
-                    <h3><i class="fas fa-info-circle"></i> Status</h3>
-                    <div id="status" class="status-box">
-                        <p>Ready to generate audio</p>
-                        <p id="apiStatus">API: Checking...</p>
+                    <div class="control-group">
+                        <label for="lfoDepth">Depth: <span id="lfoDepthValue">0.5</span></label>
+                        <input type="range" id="lfoDepth" min="0" max="1" value="0.5" step="0.05">
+                    </div>
+
+                    <div class="control-group">
+                        <label for="lfoWaveform">Waveform:</label>
+                        <select id="lfoWaveform" class="dropdown">
+                            <option value="sine">Sine</option>
+                            <option value="triangle">Triangle</option>
+                            <option value="square">Square</option>
+                            <option value="sawtooth">Sawtooth</option>
+                        </select>
                     </div>
                 </div>
             </div>
 
-            <div class="audio-visualizer">
-                <h3><i class="fas fa-chart-line"></i> Audio Visualizer</h3>
-                <canvas id="visualizerCanvas" width="800" height="150"></canvas>
+            <!-- Output Visualizer -->
+            <div class="control-panel">
+                <h3><i class="fas fa-chart-line"></i> Output Visualizer</h3>
+                <div class="visualizer-container">
+                    <canvas id="outputVisualizer"></canvas>
+                    <div class="visualizer-label">Processed Output</div>
+                </div>
             </div>
         </div>
 
         <footer>
-            <p>Audio Filter PWA v1.0 | Made with Python & Flask</p>
-            <button id="installBtn" class="btn btn-secondary">
-                <i class="fas fa-download"></i> Install App
-            </button>
+            <div class="footer-content">
+                <p>Audio Filter PWA v1.0 | Made with Python & Flask</p>
+                <div class="footer-buttons">
+                    <button id="installBtn" class="btn btn-secondary">
+                        <i class="fas fa-download"></i> Install App
+                    </button>
+                    <button id="resetBtn" class="btn btn-secondary">
+                        <i class="fas fa-redo"></i> Reset
+                    </button>
+                </div>
+            </div>
         </footer>
     </div>
 
-    <script>
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('Audio Filter PWA loaded');
-            
-            // Initialize canvases
-            const waveformCanvas = document.getElementById('waveformCanvas');
-            const visualizerCanvas = document.getElementById('visualizerCanvas');
-            const waveformCtx = waveformCanvas.getContext('2d');
-            const visualizerCtx = visualizerCanvas.getContext('2d');
-            
-            // Set canvas sizes
-            waveformCanvas.width = waveformCanvas.offsetWidth;
-            waveformCanvas.height = waveformCanvas.offsetHeight;
-            visualizerCanvas.width = visualizerCanvas.offsetWidth;
-            visualizerCanvas.height = visualizerCanvas.offsetHeight;
-            
-            // Update UI values
-            function updateUIValues() {
-                document.getElementById('frequencyValue').textContent = 
-                    document.getElementById('frequency').value + ' Hz';
-                document.getElementById('lfoFreqValue').textContent = 
-                    document.getElementById('lfoFreq').value + ' Hz';
-            }
-            
-            // Test API connection
-            async function testAPI() {
-                try {
-                    const response = await fetch('/api/health');
-                    const data = await response.json();
-                    document.getElementById('apiStatus').textContent = 'API: ✅ Connected';
-                    document.getElementById('apiStatus').style.color = 'green';
-                    return true;
-                } catch (error) {
-                    document.getElementById('apiStatus').textContent = 'API: ❌ Failed - ' + error.message;
-                    document.getElementById('apiStatus').style.color = 'red';
-                    return false;
-                }
-            }
-            
-            // Generate waveform
-            async function generateWaveform() {
-                const frequency = document.getElementById('frequency').value;
-                const status = document.getElementById('status');
-                
-                status.innerHTML = '<p>Generating waveform...</p>';
-                
-                try {
-                    const response = await fetch('/api/generate', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            frequency: parseFloat(frequency),
-                            duration: 1.0
-                        })
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success && data.waveform) {
-                        drawWaveform(data.waveform);
-                        status.innerHTML = `<p>✅ Generated ${data.samples} samples at ${data.frequency} Hz</p>`;
-                    } else {
-                        status.innerHTML = `<p>❌ Error: ${data.error || 'Unknown error'}</p>`;
-                    }
-                } catch (error) {
-                    status.innerHTML = `<p>❌ Network error: ${error.message}</p>`;
-                }
-            }
-            
-            // Draw waveform on canvas
-            function drawWaveform(waveformData) {
-                const ctx = waveformCtx;
-                const width = waveformCanvas.width;
-                const height = waveformCanvas.height;
-                
-                // Clear canvas
-                ctx.clearRect(0, 0, width, height);
-                
-                // Draw grid
-                ctx.strokeStyle = '#e0e0e0';
-                ctx.lineWidth = 1;
-                
-                // Horizontal lines
-                for (let i = 0; i <= 4; i++) {
-                    const y = (height / 4) * i;
-                    ctx.beginPath();
-                    ctx.moveTo(0, y);
-                    ctx.lineTo(width, y);
-                    ctx.stroke();
-                }
-                
-                // Draw waveform
-                ctx.strokeStyle = '#667eea';
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                
-                const step = width / waveformData.length;
-                
-                for (let i = 0; i < waveformData.length; i++) {
-                    const x = i * step;
-                    const y = (1 - (waveformData[i] + 1) / 2) * height;
-                    
-                    if (i === 0) {
-                        ctx.moveTo(x, y);
-                    } else {
-                        ctx.lineTo(x, y);
-                    }
-                }
-                
-                ctx.stroke();
-                
-                // Draw zero line
-                ctx.strokeStyle = '#764ba2';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([5, 5]);
-                ctx.beginPath();
-                ctx.moveTo(0, height / 2);
-                ctx.lineTo(width, height / 2);
-                ctx.stroke();
-                ctx.setLineDash([]);
-            }
-            
-            // Simple visualizer animation
-            function drawVisualizer() {
-                const ctx = visualizerCtx;
-                const width = visualizerCanvas.width;
-                const height = visualizerCanvas.height;
-                
-                ctx.clearRect(0, 0, width, height);
-                
-                // Draw some bars for demo
-                const barCount = 32;
-                const barWidth = width / barCount;
-                
-                for (let i = 0; i < barCount; i++) {
-                    const barHeight = Math.random() * height * 0.8;
-                    const x = i * barWidth;
-                    
-                    const gradient = ctx.createLinearGradient(0, height - barHeight, 0, height);
-                    gradient.addColorStop(0, '#667eea');
-                    gradient.addColorStop(1, '#764ba2');
-                    
-                    ctx.fillStyle = gradient;
-                    ctx.fillRect(x + 2, height - barHeight, barWidth - 4, barHeight);
-                }
-                
-                requestAnimationFrame(drawVisualizer);
-            }
-            
-            // Event listeners
-            document.getElementById('frequency').addEventListener('input', updateUIValues);
-            document.getElementById('lfoFreq').addEventListener('input', updateUIValues);
-            
-            document.getElementById('generateBtn').addEventListener('click', generateWaveform);
-            document.getElementById('testBtn').addEventListener('click', testAPI);
-            
-            document.getElementById('playBtn').addEventListener('click', function() {
-                document.getElementById('status').innerHTML = '<p>🎵 Playing audio...</p>';
-            });
-            
-            document.getElementById('stopBtn').addEventListener('click', function() {
-                document.getElementById('status').innerHTML = '<p>⏹️ Audio stopped</p>';
-            });
-            
-            // Initialize
-            updateUIValues();
-            testAPI();
-            drawVisualizer();
-            
-            // Generate initial waveform
-            setTimeout(generateWaveform, 1000);
-        });
-    </script>
+    <!-- Audio Elements -->
+    <audio id="audioPlayer" controls style="display: none;"></audio>
+    
+    <!-- Notifications Container -->
+    <div id="notificationContainer"></div>
+
+    <!-- Scripts -->
     <script src="/static/js/app.js"></script>
 </body>
 </html>
