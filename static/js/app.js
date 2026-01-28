@@ -1,16 +1,12 @@
-// Audio Filter PWA - Main Application
-class AudioFilterPWA {
+// Audio Filter PWA - Compact Version
+class AudioFilterApp {
     constructor() {
         this.audioContext = null;
-        this.mediaRecorder = null;
-        this.recordedChunks = [];
-        this.isRecording = false;
+        this.audioBuffer = null;
         this.isPlaying = false;
-        this.currentAudioBuffer = null;
-        this.sourceNode = null;
-        this.analyser = null;
-        this.audioData = null;
-        this.processedAudio = null;
+        this.isRecording = false;
+        this.currentWaveform = 'sine';
+        this.currentFilter = 'lowpass';
         
         this.init();
     }
@@ -18,104 +14,151 @@ class AudioFilterPWA {
     init() {
         console.log('Audio Filter PWA Initializing...');
         
-        this.bindEvents();
-        this.initCanvases();
-        this.initAudioContext();
-        this.updateUIValues();
-        this.checkAPI();
+        this.initUI();
+        this.initAudio();
         this.initPWA();
+        this.updateUI();
+        
+        // Test API connection
+        setTimeout(() => this.checkAPI(), 500);
         
         // Generate initial waveform
-        setTimeout(() => this.generateWaveform(), 500);
+        setTimeout(() => this.generateWaveform(), 1000);
     }
     
-    bindEvents() {
+    initUI() {
+        // Waveform buttons
+        document.querySelectorAll('.wave-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.wave-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                this.currentWaveform = e.target.dataset.wave;
+                this.updateUI();
+                this.generateWaveform();
+            });
+        });
+        
+        // Filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                this.currentFilter = e.target.dataset.filter;
+                this.updateUI();
+                this.generateWaveform();
+            });
+        });
+        
         // Slider events
-        const sliders = ['frequency', 'duration', 'cutoffFreq', 'resonance', 'lfoFreq', 'lfoDepth'];
+        const sliders = ['frequency', 'cutoffFreq', 'lfoRate', 'lfoDepth'];
         sliders.forEach(id => {
             const el = document.getElementById(id);
-            if (el) el.addEventListener('input', () => this.updateUIValues());
+            if (el) el.addEventListener('input', () => this.updateUI());
         });
         
         // Button events
-        document.getElementById('generateBtn')?.addEventListener('click', () => this.generateWaveform());
-        document.getElementById('synthesizeBtn')?.addEventListener('click', () => this.synthesizeAudio());
-        document.getElementById('playBtn')?.addEventListener('click', () => this.playAudio());
-        document.getElementById('stopBtn')?.addEventListener('click', () => this.stopAudio());
-        document.getElementById('recordBtn')?.addEventListener('click', () => this.startRecording());
-        document.getElementById('stopRecordBtn')?.addEventListener('click', () => this.stopRecording());
-        document.getElementById('uploadBtn')?.addEventListener('click', () => this.triggerUpload());
-        document.getElementById('audioUpload')?.addEventListener('change', (e) => this.handleAudioUpload(e));
-        document.getElementById('downloadBtn')?.addEventListener('click', () => this.downloadAudio());
-        document.getElementById('resetBtn')?.addEventListener('click', () => this.reset());
-        document.getElementById('installBtn')?.addEventListener('click', () => this.installPWA());
+        document.getElementById('playBtn').addEventListener('click', () => this.togglePlay());
+        document.getElementById('stopBtn').addEventListener('click', () => this.stopAudio());
+        document.getElementById('generateBtn').addEventListener('click', () => this.generateWaveform());
+        document.getElementById('synthesizeBtn').addEventListener('click', () => this.synthesizeAudio());
+        document.getElementById('processBtn').addEventListener('click', () => this.processAudio());
+        document.getElementById('downloadBtn').addEventListener('click', () => this.downloadAudio());
+        document.getElementById('resetBtn').addEventListener('click', () => this.reset());
+        document.getElementById('recordBtn').addEventListener('click', () => this.toggleRecord());
+        document.getElementById('uploadBtn').addEventListener('click', () => document.getElementById('audioUpload').click());
+        document.getElementById('audioUpload').addEventListener('change', (e) => this.handleUpload(e));
         
-        // Dropdown events
-        ['waveform', 'filterType', 'lfoWaveform'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.addEventListener('change', () => this.generateWaveform());
+        // Install prompt
+        document.getElementById('installAccept').addEventListener('click', () => this.installPWA());
+        document.getElementById('installDismiss').addEventListener('click', () => {
+            document.getElementById('installPrompt').style.display = 'none';
         });
         
-        // Toggle events
-        document.getElementById('lfoEnabled')?.addEventListener('change', () => this.generateWaveform());
+        // Initialize canvas
+        this.canvas = document.getElementById('waveVisualizer');
+        this.ctx = this.canvas.getContext('2d');
+        this.resizeCanvas();
+        window.addEventListener('resize', () => this.resizeCanvas());
     }
     
-    initCanvases() {
-        this.canvases = {
-            waveform: document.getElementById('waveformCanvas'),
-            input: document.getElementById('inputVisualizer'),
-            output: document.getElementById('outputVisualizer')
-        };
-        
-        this.ctx = {};
-        
-        for (const [key, canvas] of Object.entries(this.canvases)) {
-            if (canvas) {
-                this.ctx[key] = canvas.getContext('2d');
-                canvas.width = canvas.offsetWidth;
-                canvas.height = canvas.offsetHeight;
-            }
-        }
-        
-        window.addEventListener('resize', () => {
-            for (const [key, canvas] of Object.entries(this.canvases)) {
-                if (canvas) {
-                    canvas.width = canvas.offsetWidth;
-                    canvas.height = canvas.offsetHeight;
-                }
-            }
-            this.drawWaveform();
-            this.drawVisualizers();
-        });
+    resizeCanvas() {
+        this.canvas.width = this.canvas.offsetWidth;
+        this.canvas.height = this.canvas.offsetHeight;
+        this.drawWaveform();
     }
     
-    async initAudioContext() {
+    initAudio() {
         try {
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            console.log('AudioContext initialized');
+            this.updateStatus('audio', 'ready');
         } catch (e) {
             console.error('AudioContext not supported:', e);
-            this.showNotification('Web Audio API not supported in this browser', 'error');
+            this.updateStatus('audio', 'error');
         }
     }
     
-    updateUIValues() {
-        // Update all value displays
-        const updates = {
-            'frequencyValue': {el: 'frequency', suffix: ' Hz'},
-            'durationValue': {el: 'duration', suffix: ' s'},
-            'cutoffValue': {el: 'cutoffFreq', suffix: ' Hz'},
-            'resonanceValue': {el: 'resonance', suffix: ''},
-            'lfoFreqValue': {el: 'lfoFreq', suffix: ' Hz'},
-            'lfoDepthValue': {el: 'lfoDepth', suffix: ''}
+    initPWA() {
+        // Check if PWA is installable
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            window.deferredPrompt = e;
+            this.updateStatus('pwa', 'installable');
+            
+            // Show install prompt after 3 seconds
+            setTimeout(() => {
+                const prompt = document.getElementById('installPrompt');
+                if (prompt && !this.isPWAInstalled()) {
+                    prompt.style.display = 'block';
+                }
+            }, 3000);
+        });
+        
+        // Check if already installed
+        if (this.isPWAInstalled()) {
+            this.updateStatus('pwa', 'installed');
+            document.getElementById('installPrompt').style.display = 'none';
+        }
+    }
+    
+    isPWAInstalled() {
+        return window.matchMedia('(display-mode: standalone)').matches || 
+               window.navigator.standalone === true;
+    }
+    
+    updateUI() {
+        // Update value displays
+        const values = {
+            'freqValue': document.getElementById('frequency').value,
+            'cutoffValue': document.getElementById('cutoffFreq').value,
+            'lfoRateValue': document.getElementById('lfoRate').value,
+            'lfoDepthValue': document.getElementById('lfoDepth').value
         };
         
-        for (const [displayId, config] of Object.entries(updates)) {
-            const displayEl = document.getElementById(displayId);
-            const sourceEl = document.getElementById(config.el);
-            if (displayEl && sourceEl) {
-                displayEl.textContent = sourceEl.value + config.suffix;
-            }
+        for (const [id, value] of Object.entries(values)) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        }
+        
+        // Update visualizer info
+        document.getElementById('frequencyDisplay').textContent = 
+            document.getElementById('frequency').value + ' Hz';
+        document.getElementById('waveformDisplay').textContent = 
+            this.currentWaveform.charAt(0).toUpperCase() + this.currentWaveform.slice(1);
+    }
+    
+    updateStatus(type, status) {
+        const el = document.getElementById(type + 'Status');
+        if (!el) return;
+        
+        const statusMap = {
+            'api': { ready: 'API ✅', error: 'API ❌' },
+            'pwa': { ready: 'PWA ✅', installable: 'PWA ⬇️', installed: 'PWA 📱' },
+            'audio': { ready: 'Audio ✅', error: 'Audio ❌' }
+        };
+        
+        if (statusMap[type] && statusMap[type][status]) {
+            el.textContent = statusMap[type][status];
+            el.className = `status ${type}`;
         }
     }
     
@@ -123,19 +166,12 @@ class AudioFilterPWA {
         try {
             const response = await fetch('/api/health');
             const data = await response.json();
-            const statusEl = document.getElementById('connectionStatus');
-            if (statusEl) {
-                statusEl.textContent = '🟢 API Connected';
-                statusEl.style.color = 'green';
-            }
+            this.updateStatus('api', 'ready');
             return true;
         } catch (error) {
-            const statusEl = document.getElementById('connectionStatus');
-            if (statusEl) {
-                statusEl.textContent = '🔴 API Disconnected';
-                statusEl.style.color = 'red';
-            }
-            this.showNotification('Cannot connect to server API', 'error');
+            console.error('API error:', error);
+            this.updateStatus('api', 'error');
+            this.showNotification('Cannot connect to server', 'error');
             return false;
         }
     }
@@ -143,10 +179,9 @@ class AudioFilterPWA {
     async generateWaveform() {
         try {
             const params = this.getParams();
-            
             const response = await fetch('/api/generate', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(params)
             });
             
@@ -155,112 +190,103 @@ class AudioFilterPWA {
             if (data.success) {
                 this.audioData = data.waveform;
                 this.drawWaveform();
-                this.showNotification(`Generated ${data.samples} samples`, 'success');
+                this.showNotification('Waveform generated');
             } else {
-                this.showNotification(`Error: ${data.error}`, 'error');
+                this.showNotification('Generation failed: ' + data.error, 'error');
             }
         } catch (error) {
             console.error('Generate error:', error);
-            this.showNotification('Failed to generate waveform', 'error');
+            this.showNotification('Failed to generate', 'error');
         }
     }
     
     async synthesizeAudio() {
         try {
             const params = this.getParams();
-            
             const response = await fetch('/api/synthesize', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(params)
             });
             
             const data = await response.json();
             
             if (data.success) {
-                this.processedAudio = data.audio;
-                await this.createAudioBuffer(this.processedAudio, data.sample_rate);
-                this.drawVisualizers();
-                this.showNotification(`Synthesized ${data.duration}s audio`, 'success');
+                await this.createAudioBuffer(data.audio, data.sample_rate);
+                this.showNotification('Audio synthesized');
             } else {
-                this.showNotification(`Error: ${data.error}`, 'error');
+                this.showNotification('Synthesis failed: ' + data.error, 'error');
             }
         } catch (error) {
             console.error('Synthesize error:', error);
-            this.showNotification('Failed to synthesize audio', 'error');
+            this.showNotification('Failed to synthesize', 'error');
         }
     }
     
-    async processAudio(audioData) {
+    async processAudio() {
+        if (!this.audioData) {
+            this.showNotification('No audio to process', 'warning');
+            return;
+        }
+        
         try {
             const params = this.getParams();
-            params.audio_data = audioData;
+            params.audio_data = this.audioData;
             
             const response = await fetch('/api/process_audio', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(params)
             });
             
             const data = await response.json();
             
             if (data.success) {
-                this.processedAudio = data.processed_audio;
-                this.drawVisualizers();
-                this.showNotification(`Processed ${data.processed_length} samples`, 'success');
+                this.audioData = data.processed_audio;
+                this.drawWaveform();
+                this.showNotification('Audio processed');
             } else {
-                this.showNotification(`Error: ${data.error}`, 'error');
+                this.showNotification('Processing failed: ' + data.error, 'error');
             }
         } catch (error) {
             console.error('Process error:', error);
-            this.showNotification('Failed to process audio', 'error');
+            this.showNotification('Failed to process', 'error');
         }
     }
     
     getParams() {
         return {
-            frequency: parseFloat(document.getElementById('frequency')?.value || 440),
-            duration: parseFloat(document.getElementById('duration')?.value || 1.0),
-            waveform: document.getElementById('waveform')?.value || 'sine',
-            filter_type: document.getElementById('filterType')?.value || 'lowpass',
-            cutoff_freq: parseFloat(document.getElementById('cutoffFreq')?.value || 1000),
-            resonance: parseFloat(document.getElementById('resonance')?.value || 0.7),
-            lfo_enabled: document.getElementById('lfoEnabled')?.checked || false,
-            lfo_freq: parseFloat(document.getElementById('lfoFreq')?.value || 5),
-            lfo_waveform: document.getElementById('lfoWaveform')?.value || 'sine',
-            lfo_depth: parseFloat(document.getElementById('lfoDepth')?.value || 0.5)
+            frequency: parseFloat(document.getElementById('frequency').value),
+            duration: 1.0,
+            waveform: this.currentWaveform,
+            filter_type: this.currentFilter,
+            cutoff_freq: parseFloat(document.getElementById('cutoffFreq').value),
+            resonance: 0.7,
+            lfo_enabled: document.getElementById('lfoEnabled').checked,
+            lfo_freq: parseFloat(document.getElementById('lfoRate').value),
+            lfo_waveform: 'sine',
+            lfo_depth: parseFloat(document.getElementById('lfoDepth').value) / 100
         };
     }
     
     drawWaveform() {
-        if (!this.ctx.waveform || !this.audioData) return;
+        if (!this.ctx || !this.audioData) return;
         
-        const ctx = this.ctx.waveform;
-        const canvas = this.canvases.waveform;
-        const width = canvas.width;
-        const height = canvas.height;
+        const width = this.canvas.width;
+        const height = this.canvas.height;
         const data = this.audioData;
         
         // Clear
-        ctx.clearRect(0, 0, width, height);
+        this.ctx.clearRect(0, 0, width, height);
         
         // Draw grid
-        ctx.strokeStyle = '#e0e0e0';
-        ctx.lineWidth = 1;
-        
-        // Horizontal lines
-        for (let i = 0; i <= 4; i++) {
-            const y = (height / 4) * i;
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(width, y);
-            ctx.stroke();
-        }
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        this.ctx.lineWidth = 1;
         
         // Draw waveform
-        ctx.strokeStyle = '#667eea';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
+        this.ctx.strokeStyle = '#667eea';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
         
         const step = width / data.length;
         
@@ -269,59 +295,13 @@ class AudioFilterPWA {
             const y = (1 - (data[i] + 1) / 2) * height;
             
             if (i === 0) {
-                ctx.moveTo(x, y);
+                this.ctx.moveTo(x, y);
             } else {
-                ctx.lineTo(x, y);
+                this.ctx.lineTo(x, y);
             }
         }
         
-        ctx.stroke();
-    }
-    
-    drawVisualizers() {
-        // Draw input visualizer
-        if (this.ctx.input && this.audioData) {
-            this.drawBars(this.ctx.input, this.canvases.input, this.audioData);
-        }
-        
-        // Draw output visualizer
-        if (this.ctx.output && this.processedAudio) {
-            this.drawBars(this.ctx.output, this.canvases.output, this.processedAudio);
-        }
-    }
-    
-    drawBars(ctx, canvas, data) {
-        const width = canvas.width;
-        const height = canvas.height;
-        
-        ctx.clearRect(0, 0, width, height);
-        
-        // Use actual data or generate random for demo
-        const barCount = 64;
-        const barWidth = width / barCount;
-        
-        for (let i = 0; i < barCount; i++) {
-            let value;
-            if (data && data.length > i) {
-                // Use actual audio data
-                const idx = Math.floor(i * (data.length / barCount));
-                value = Math.abs(data[idx]) || 0;
-            } else {
-                // Fallback to random
-                value = Math.random() * 0.8;
-            }
-            
-            const barHeight = value * height;
-            const x = i * barWidth;
-            const y = height - barHeight;
-            
-            const gradient = ctx.createLinearGradient(0, y, 0, height);
-            gradient.addColorStop(0, '#667eea');
-            gradient.addColorStop(1, '#764ba2');
-            
-            ctx.fillStyle = gradient;
-            ctx.fillRect(x + 1, y, barWidth - 2, barHeight);
-        }
+        this.ctx.stroke();
     }
     
     async createAudioBuffer(audioData, sampleRate) {
@@ -335,56 +315,43 @@ class AudioFilterPWA {
                 channelData[i] = audioData[i];
             }
             
-            this.currentAudioBuffer = buffer;
-            
-            // Setup analyser for visualization
-            this.analyser = this.audioContext.createAnalyser();
-            this.analyser.fftSize = 2048;
-            
+            this.audioBuffer = buffer;
+            return true;
         } catch (error) {
             console.error('Create buffer error:', error);
+            return false;
+        }
+    }
+    
+    async togglePlay() {
+        if (this.isPlaying) {
+            this.stopAudio();
+        } else {
+            await this.playAudio();
         }
     }
     
     async playAudio() {
-        if (!this.audioContext || !this.currentAudioBuffer) {
+        if (!this.audioContext || !this.audioBuffer) {
             await this.synthesizeAudio();
-            if (!this.currentAudioBuffer) return;
-        }
-        
-        if (this.isPlaying) {
-            this.stopAudio();
-            return;
+            if (!this.audioBuffer) return;
         }
         
         try {
             this.sourceNode = this.audioContext.createBufferSource();
-            this.sourceNode.buffer = this.currentAudioBuffer;
-            
-            // Connect through analyser for visualization
-            if (this.analyser) {
-                this.sourceNode.connect(this.analyser);
-                this.analyser.connect(this.audioContext.destination);
-            } else {
-                this.sourceNode.connect(this.audioContext.destination);
-            }
+            this.sourceNode.buffer = this.audioBuffer;
+            this.sourceNode.connect(this.audioContext.destination);
             
             this.sourceNode.start();
             this.isPlaying = true;
             
-            const playBtn = document.getElementById('playBtn');
-            if (playBtn) {
-                playBtn.innerHTML = '<i class="fas fa-pause"></i> Pause';
-            }
+            document.getElementById('playBtn').classList.add('playing');
+            this.showNotification('Playing audio...');
             
             this.sourceNode.onended = () => {
                 this.isPlaying = false;
-                if (playBtn) {
-                    playBtn.innerHTML = '<i class="fas fa-play"></i> Play';
-                }
+                document.getElementById('playBtn').classList.remove('playing');
             };
-            
-            this.showNotification('Playing audio...', 'info');
             
         } catch (error) {
             console.error('Play error:', error);
@@ -400,13 +367,16 @@ class AudioFilterPWA {
         }
         
         this.isPlaying = false;
-        
-        const playBtn = document.getElementById('playBtn');
-        if (playBtn) {
-            playBtn.innerHTML = '<i class="fas fa-play"></i> Play';
+        document.getElementById('playBtn').classList.remove('playing');
+        this.showNotification('Audio stopped');
+    }
+    
+    async toggleRecord() {
+        if (this.isRecording) {
+            this.stopRecording();
+        } else {
+            await this.startRecording();
         }
-        
-        this.showNotification('Audio stopped', 'info');
     }
     
     async startRecording() {
@@ -421,55 +391,40 @@ class AudioFilterPWA {
                 }
             };
             
-            this.mediaRecorder.onstop = () => {
-                this.handleRecordingStop();
+            this.mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(this.recordedChunks, { type: 'audio/webm' });
+                const arrayBuffer = await audioBlob.arrayBuffer();
+                
+                if (this.audioContext) {
+                    const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+                    const channelData = audioBuffer.getChannelData(0);
+                    this.audioData = Array.from(channelData).slice(0, 44100);
+                    this.drawWaveform();
+                    this.showNotification('Recording complete');
+                }
+                
+                this.isRecording = false;
+                document.getElementById('recordBtn').classList.remove('recording');
             };
             
             this.mediaRecorder.start();
             this.isRecording = true;
-            
-            document.getElementById('recordBtn').disabled = true;
-            document.getElementById('stopRecordBtn').disabled = false;
-            
-            this.showNotification('Recording started...', 'info');
+            document.getElementById('recordBtn').classList.add('recording');
+            this.showNotification('Recording...');
             
         } catch (error) {
-            console.error('Recording error:', error);
-            this.showNotification('Failed to start recording', 'error');
+            console.error('Record error:', error);
+            this.showNotification('Recording failed', 'error');
         }
     }
     
     stopRecording() {
         if (this.mediaRecorder && this.isRecording) {
             this.mediaRecorder.stop();
-            this.isRecording = false;
-            
-            document.getElementById('recordBtn').disabled = false;
-            document.getElementById('stopRecordBtn').disabled = true;
         }
     }
     
-    async handleRecordingStop() {
-        if (this.recordedChunks.length === 0) return;
-        
-        const audioBlob = new Blob(this.recordedChunks, { type: 'audio/webm' });
-        
-        // Convert blob to audio buffer for processing
-        const arrayBuffer = await audioBlob.arrayBuffer();
-        if (this.audioContext) {
-            const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-            const channelData = audioBuffer.getChannelData(0);
-            this.audioData = Array.from(channelData);
-            this.drawWaveform();
-            this.showNotification('Recording complete!', 'success');
-        }
-    }
-    
-    triggerUpload() {
-        document.getElementById('audioUpload').click();
-    }
-    
-    async handleAudioUpload(event) {
+    async handleUpload(event) {
         const file = event.target.files[0];
         if (!file) return;
         
@@ -478,68 +433,67 @@ class AudioFilterPWA {
             if (this.audioContext) {
                 const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
                 const channelData = audioBuffer.getChannelData(0);
-                this.audioData = Array.from(channelData).slice(0, 44100); // First second
+                this.audioData = Array.from(channelData).slice(0, 44100);
                 this.drawWaveform();
-                this.showNotification('Audio uploaded!', 'success');
+                this.showNotification('Audio uploaded');
             }
         } catch (error) {
             console.error('Upload error:', error);
-            this.showNotification('Failed to upload audio', 'error');
+            this.showNotification('Upload failed', 'error');
         }
     }
     
     downloadAudio() {
-        if (!this.processedAudio) {
+        if (!this.audioData) {
             this.showNotification('No audio to download', 'warning');
             return;
         }
         
-        // Convert float array to WAV (simplified)
-        const sampleRate = 44100;
-        const numChannels = 1;
-        const bytesPerSample = 2;
-        const blockAlign = numChannels * bytesPerSample;
-        const byteRate = sampleRate * blockAlign;
-        const dataSize = this.processedAudio.length * blockAlign;
+        // Simple WAV export
+        const wavData = this.floatTo16BitPCM(this.audioData);
+        const wavBlob = new Blob([wavData], { type: 'audio/wav' });
+        const url = URL.createObjectURL(wavBlob);
         
-        const buffer = new ArrayBuffer(44 + dataSize);
-        const view = new DataView(buffer);
-        
-        // Write WAV header
-        this.writeString(view, 0, 'RIFF');
-        view.setUint32(4, 36 + dataSize, true);
-        this.writeString(view, 8, 'WAVE');
-        this.writeString(view, 12, 'fmt ');
-        view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true);
-        view.setUint16(22, numChannels, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, byteRate, true);
-        view.setUint16(32, blockAlign, true);
-        view.setUint16(34, bytesPerSample * 8, true);
-        this.writeString(view, 36, 'data');
-        view.setUint32(40, dataSize, true);
-        
-        // Write audio data
-        let offset = 44;
-        for (let i = 0; i < this.processedAudio.length; i++) {
-            const sample = Math.max(-1, Math.min(1, this.processedAudio[i]));
-            view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
-            offset += 2;
-        }
-        
-        // Create download link
-        const blob = new Blob([buffer], { type: 'audio/wav' });
-        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'audio_filter_output.wav';
+        a.download = 'audio_filter.wav';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         
-        this.showNotification('Audio downloaded!', 'success');
+        this.showNotification('Audio downloaded');
+    }
+    
+    floatTo16BitPCM(floatData) {
+        // Simplified WAV conversion
+        const buffer = new ArrayBuffer(44 + floatData.length * 2);
+        const view = new DataView(buffer);
+        
+        // Write WAV header
+        this.writeString(view, 0, 'RIFF');
+        view.setUint32(4, 36 + floatData.length * 2, true);
+        this.writeString(view, 8, 'WAVE');
+        this.writeString(view, 12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, 44100, true);
+        view.setUint32(28, 44100 * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        this.writeString(view, 36, 'data');
+        view.setUint32(40, floatData.length * 2, true);
+        
+        // Write audio data
+        let offset = 44;
+        for (let i = 0; i < floatData.length; i++) {
+            const sample = Math.max(-1, Math.min(1, floatData[i]));
+            view.setInt16(offset, sample * 0x7FFF, true);
+            offset += 2;
+        }
+        
+        return buffer;
     }
     
     writeString(view, offset, string) {
@@ -551,49 +505,31 @@ class AudioFilterPWA {
     reset() {
         this.stopAudio();
         this.stopRecording();
-        this.audioData = null;
-        this.processedAudio = null;
-        this.currentAudioBuffer = null;
         
-        // Reset UI
+        // Reset controls
         document.getElementById('frequency').value = 440;
-        document.getElementById('duration').value = 1.0;
         document.getElementById('cutoffFreq').value = 1000;
-        document.getElementById('resonance').value = 0.7;
-        document.getElementById('lfoFreq').value = 5;
-        document.getElementById('lfoDepth').value = 0.5;
+        document.getElementById('lfoRate').value = 5;
+        document.getElementById('lfoDepth').value = 50;
         document.getElementById('lfoEnabled').checked = true;
         
-        this.updateUIValues();
+        document.querySelectorAll('.wave-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector('.wave-btn[data-wave="sine"]').classList.add('active');
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector('.filter-btn[data-filter="lowpass"]').classList.add('active');
+        
+        this.currentWaveform = 'sine';
+        this.currentFilter = 'lowpass';
+        this.audioData = null;
+        
+        this.updateUI();
         this.drawWaveform();
-        this.drawVisualizers();
-        
-        this.showNotification('Reset complete', 'info');
-    }
-    
-    initPWA() {
-        // Check if PWA is installable
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            window.deferredPrompt = e;
-            const pwaStatus = document.getElementById('pwaStatus');
-            if (pwaStatus) {
-                pwaStatus.textContent = '📱 Install Available';
-            }
-        });
-        
-        // Check if already installed
-        if (window.matchMedia('(display-mode: standalone)').matches) {
-            const pwaStatus = document.getElementById('pwaStatus');
-            if (pwaStatus) {
-                pwaStatus.textContent = '📱 Installed';
-            }
-        }
+        this.showNotification('Reset complete');
     }
     
     async installPWA() {
         if (!window.deferredPrompt) {
-            this.showNotification('App can be installed from browser menu', 'info');
+            this.showNotification('Use browser menu to install', 'info');
             return;
         }
         
@@ -601,88 +537,32 @@ class AudioFilterPWA {
         const { outcome } = await window.deferredPrompt.userChoice;
         
         if (outcome === 'accepted') {
-            this.showNotification('App installed successfully!', 'success');
-            window.deferredPrompt = null;
+            this.updateStatus('pwa', 'installed');
+            document.getElementById('installPrompt').style.display = 'none';
+            this.showNotification('App installed!');
         }
+        
+        window.deferredPrompt = null;
     }
     
     showNotification(message, type = 'info') {
-        const container = document.getElementById('notificationContainer') || document.body;
+        const notification = document.getElementById('notification');
+        if (!notification) return;
         
-        const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
+        // Set message and style
+        notification.textContent = message;
+        notification.className = type === 'error' ? 'notification-visible error' : 
+                               type === 'warning' ? 'notification-visible warning' : 
+                               'notification-visible';
         
-        const icons = {
-            success: '✅',
-            error: '❌',
-            warning: '⚠️',
-            info: 'ℹ️'
-        };
-        
-        notification.innerHTML = `
-            <span class="notification-icon">${icons[type] || icons.info}</span>
-            <span class="notification-text">${message}</span>
-        `;
-        
-        // Add styles if not already present
-        if (!document.querySelector('#notification-styles')) {
-            const style = document.createElement('style');
-            style.id = 'notification-styles';
-            style.textContent = `
-                .notification {
-                    position: fixed;
-                    top: 20px;
-                    right: 20px;
-                    padding: 12px 20px;
-                    background: white;
-                    border-radius: 8px;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                    z-index: 1000;
-                    animation: slideIn 0.3s ease;
-                    max-width: 300px;
-                }
-                .notification.success {
-                    border-left: 4px solid #4CAF50;
-                }
-                .notification.error {
-                    border-left: 4px solid #f44336;
-                }
-                .notification.warning {
-                    border-left: 4px solid #ff9800;
-                }
-                .notification.info {
-                    border-left: 4px solid #2196F3;
-                }
-                @keyframes slideIn {
-                    from { transform: translateX(100%); opacity: 0; }
-                    to { transform: translateX(0); opacity: 1; }
-                }
-                @keyframes slideOut {
-                    from { transform: translateX(0); opacity: 1; }
-                    to { transform: translateX(100%); opacity: 0; }
-                }
-            `;
-            document.head.appendChild(style);
-        }
-        
-        container.appendChild(notification);
-        
-        // Remove after 3 seconds
+        // Auto hide
         setTimeout(() => {
-            notification.style.animation = 'slideOut 0.3s ease';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.parentNode.removeChild(notification);
-                }
-            }, 300);
+            notification.className = 'notification-hidden';
         }, 3000);
     }
 }
 
-// Initialize when DOM is loaded
+// Start the app
 document.addEventListener('DOMContentLoaded', () => {
-    window.audioApp = new AudioFilterPWA();
+    window.audioApp = new AudioFilterApp();
 });
