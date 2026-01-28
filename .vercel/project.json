@@ -1,0 +1,10 @@
+{
+  "projectId": "audio-filter-pwa",
+  "settings": {
+    "framework": null,
+    "devCommand": null,
+    "installCommand": "pip install -r requirements.txt",
+    "buildCommand": null,
+    "outputDirectory": "."
+  }
+}
