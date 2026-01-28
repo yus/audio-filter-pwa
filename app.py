@@ -1,69 +1,69 @@
-from flask import Flask, render_template, jsonify, request, send_from_directory, abort
+from flask import Flask, render_template, jsonify, request, send_from_directory, make_response
 import math
 import time
 import os
-import traceback
 
-app = Flask(__name__, 
-            static_folder='static',
-            template_folder='templates')
+app = Flask(__name__, static_folder='static', template_folder='templates')
 
-# Get absolute paths
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# CORS headers
+# Enable CORS for all routes
 @app.after_request
-def add_cors_headers(response):
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS, PUT, DELETE'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
     return response
 
 # Handle OPTIONS requests for CORS
 @app.before_request
 def handle_options():
     if request.method == 'OPTIONS':
-        return '', 200
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        return response
 
-# ========== STATIC FILES ==========
+# Serve static files with correct MIME types
 @app.route('/static/<path:filename>')
 def serve_static(filename):
-    try:
-        return send_from_directory('static', filename)
-    except:
-        abort(404)
+    return send_from_directory('static', filename)
 
-@app.route('/favicon.ico')
-def favicon():
-    try:
-        return send_from_directory('static', 'favicon.ico')
-    except:
-        return '', 404
+# Serve manifest
+@app.route('/manifest.json')
+def serve_manifest():
+    return send_from_directory('static', 'manifest.json')
 
-# ========== API ENDPOINTS ==========
+# API Health Check
 @app.route('/api/health')
-def health_check():
+def health():
     return jsonify({
         'status': 'ok',
-        'server_time': time.time(),
-        'python_version': os.sys.version,
-        'flask_ready': True
+        'time': time.time(),
+        'message': 'Audio Filter PWA API is running',
+        'endpoints': {
+            'generate_waveform': '/api/generate (POST)',
+            'synthesize': '/api/synthesize (POST)',
+            'health': '/api/health (GET)'
+        }
     })
 
-@app.route('/api/generate', methods=['POST'])
+# Generate waveform endpoint
+@app.route('/api/generate', methods=['POST', 'OPTIONS'])
 def generate_waveform():
+    if request.method == 'OPTIONS':
+        return '', 200
+    
     try:
-        data = request.get_json() or {}
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
         freq = float(data.get('frequency', 440))
         duration = float(data.get('duration', 1.0))
         
-        # Limit to reasonable values
-        freq = max(20, min(20000, freq))
-        duration = max(0.1, min(5.0, duration))
-        
+        # Generate waveform
         samples = min(1000, int(44100 * duration))
         waveform = []
-        
         for i in range(samples):
             t = i / 44100
             value = math.sin(2 * math.pi * freq * t)
@@ -74,83 +74,90 @@ def generate_waveform():
             'waveform': waveform,
             'frequency': freq,
             'duration': duration,
-            'samples': len(waveform)
+            'samples': samples
         })
         
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'traceback': traceback.format_exc()
-        }), 500
+        return jsonify({'error': str(e)}), 500
 
-# ========== MAIN ROUTES ==========
+# Synthesize audio endpoint
+@app.route('/api/synthesize', methods=['POST', 'OPTIONS'])
+def synthesize():
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
+        freq = float(data.get('frequency', 440))
+        duration = float(data.get('duration', 1.0))
+        waveform_type = data.get('waveform', 'sine')
+        
+        samples = min(10000, int(44100 * duration))
+        audio = []
+        
+        for i in range(samples):
+            t = i / 44100
+            
+            if waveform_type == 'sine':
+                value = math.sin(2 * math.pi * freq * t)
+            elif waveform_type == 'square':
+                value = 1.0 if math.sin(2 * math.pi * freq * t) >= 0 else -1.0
+            elif waveform_type == 'sawtooth':
+                frac = freq * t - int(freq * t)
+                value = 2 * frac - 1
+            elif waveform_type == 'triangle':
+                frac = freq * t - int(freq * t)
+                value = 4 * abs(frac - 0.5) - 1
+            else:
+                value = 0
+            
+            audio.append(float(value))
+        
+        # Simple envelope
+        for i in range(len(audio)):
+            if i < 100:  # fade in
+                audio[i] *= i / 100
+            elif i > len(audio) - 100:  # fade out
+                audio[i] *= (len(audio) - i) / 100
+        
+        return jsonify({
+            'success': True,
+            'audio': audio[:1000],  # First 1000 samples
+            'sample_rate': 44100,
+            'duration': duration,
+            'waveform': waveform_type
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Main route
 @app.route('/')
 def index():
-    try:
-        return render_template('index.html')
-    except Exception as e:
-        return f"""
-        <html>
-            <head><title>Audio Filter PWA</title></head>
-            <body>
-                <h1>Audio Filter PWA</h1>
-                <p>Template rendering error: {str(e)}</p>
-                <p>Template folder: {app.template_folder}</p>
-                <p>Current directory: {os.getcwd()}</p>
-            </body>
-        </html>
-        """, 500
-
-@app.route('/<path:path>')
-def catch_all(path):
-    if path.startswith('api/'):
-        abort(404)
     return render_template('index.html')
 
-# ========== ERROR HANDLERS ==========
+# Catch-all for SPA routing
+@app.route('/<path:path>')
+def catch_all(path):
+    if path.startswith('api/') or path.startswith('static/'):
+        return '', 404
+    return render_template('index.html')
+
+# Error handlers
 @app.errorhandler(404)
-def not_found(error):
+def not_found(e):
     return jsonify({'error': 'Not found'}), 404
 
 @app.errorhandler(500)
-def internal_error(error):
-    return jsonify({
-        'error': 'Internal server error',
-        'message': str(error) if str(error) else 'Unknown error'
-    }), 500
+def internal_error(e):
+    return jsonify({'error': 'Internal server error'}), 500
 
-# ========== DEBUG INFO ==========
-@app.route('/debug')
-def debug_info():
-    return jsonify({
-        'cwd': os.getcwd(),
-        'files': os.listdir('.'),
-        'static_exists': os.path.exists('static'),
-        'templates_exists': os.path.exists('templates'),
-        'template_files': os.listdir('templates') if os.path.exists('templates') else [],
-        'static_files': os.listdir('static') if os.path.exists('static') else []
-    })
-            
-# ========== TEST ENDPOINT =========
-@app.route('/test')
-def test():
-    return """
-    <html>
-        <head><title>Test Page</title></head>
-        <body>
-            <h1>Flask is working!</h1>
-            <p>If you see this, Flask is running correctly.</p>
-            <p><a href="/">Go to main app</a></p>
-            <p><a href="/debug">Debug info</a></p>
-            <p><a href="/api/health">API Health</a></p>
-        </body>
-    </html>
-    """
-
-
-# ========== APPLICATION START ==========
+# Application entry point
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port, debug=True)
 else:
     application = app
