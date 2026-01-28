@@ -2,178 +2,191 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Audio Filter PWA</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <meta name="theme-color" content="#667eea">
+    <style>
+        /* Inline critical styles for faster loading */
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --dark: #1a1a2e;
+            --light: #f8f9fa;
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, var(--dark) 0%, #16213e 100%);
+            color: white;
+            height: 100vh;
+            overflow: hidden;
+        }
+    </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1><i class="fas fa-wave-square"></i> Audio Filter PWA</h1>
-            <p class="subtitle">Real-time Audio Processing with LFO Modulation</p>
-            <div class="status-bar">
-                <span id="connectionStatus">🟡 Connecting...</span>
-                <span id="pwaStatus" class="pwa-indicator">📱 PWA Ready</span>
+    <!-- Install Prompt -->
+    <div id="installPrompt" class="install-prompt">
+        <div class="install-content">
+            <i class="fas fa-download"></i>
+            <div>
+                <h4>Install Audio Filter</h4>
+                <p>For best experience, install as PWA</p>
+            </div>
+            <button id="installAccept" class="btn-install">Install</button>
+            <button id="installDismiss" class="btn-dismiss">Later</button>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- Header Bar -->
+        <header class="app-header">
+            <div class="header-left">
+                <h1><i class="fas fa-wave-square"></i> AudioFilter</h1>
+                <div class="status-indicators">
+                    <span id="apiStatus" class="status api">API</span>
+                    <span id="pwaStatus" class="status pwa">PWA</span>
+                    <span id="audioStatus" class="status audio">Audio</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <button id="recordBtn" class="btn-icon" title="Record">
+                    <i class="fas fa-microphone"></i>
+                </button>
+                <button id="uploadBtn" class="btn-icon" title="Upload">
+                    <i class="fas fa-upload"></i>
+                </button>
+                <input type="file" id="audioUpload" accept="audio/*" style="display: none;">
             </div>
         </header>
 
-        <div class="main-content">
-            <!-- Audio Input Section -->
-            <div class="control-panel">
-                <h3><i class="fas fa-microphone"></i> Audio Input</h3>
-                <div class="button-group">
-                    <button id="recordBtn" class="btn">
-                        <i class="fas fa-circle"></i> Record
-                    </button>
-                    <button id="stopRecordBtn" class="btn" disabled>
-                        <i class="fas fa-stop"></i> Stop
-                    </button>
-                    <button id="uploadBtn" class="btn">
-                        <i class="fas fa-upload"></i> Upload Audio
-                    </button>
-                    <input type="file" id="audioUpload" accept="audio/*" style="display: none;">
-                </div>
+        <!-- Main Content - Single Screen -->
+        <main class="main-content">
+            <!-- Visualizer Section -->
+            <div class="visualizer-section">
                 <div class="visualizer-container">
-                    <canvas id="inputVisualizer"></canvas>
-                    <div class="visualizer-label">Input</div>
+                    <canvas id="waveVisualizer"></canvas>
+                    <div class="visualizer-overlay">
+                        <div class="viz-controls">
+                            <button id="playBtn" class="btn-viz">
+                                <i class="fas fa-play"></i>
+                            </button>
+                            <button id="stopBtn" class="btn-viz">
+                                <i class="fas fa-stop"></i>
+                            </button>
+                            <button id="generateBtn" class="btn-viz">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                        <div class="viz-info">
+                            <span id="frequencyDisplay">440 Hz</span>
+                            <span id="waveformDisplay">Sine</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Waveform Display -->
-            <div class="waveform-container">
-                <h3><i class="fas fa-waveform"></i> Waveform</h3>
-                <canvas id="waveformCanvas"></canvas>
-                <div class="waveform-controls">
-                    <button id="playBtn" class="btn"><i class="fas fa-play"></i> Play</button>
-                    <button id="stopBtn" class="btn"><i class="fas fa-stop"></i> Stop</button>
-                    <button id="generateBtn" class="btn"><i class="fas fa-sync-alt"></i> Generate</button>
-                    <button id="downloadBtn" class="btn"><i class="fas fa-download"></i> Download</button>
-                </div>
-            </div>
-
-            <!-- Controls Grid -->
+            <!-- Compact Controls Grid -->
             <div class="controls-grid">
-                <!-- Synthesizer Controls -->
-                <div class="control-panel">
-                    <h3><i class="fas fa-sliders-h"></i> Synthesizer</h3>
-                    
-                    <div class="control-group">
-                        <label for="frequency">Frequency: <span id="frequencyValue">440 Hz</span></label>
+                <!-- Column 1: Oscillator -->
+                <div class="control-column">
+                    <h3><i class="fas fa-wave-circle"></i> OSC</h3>
+                    <div class="control-group compact">
+                        <label>Freq <span id="freqValue">440</span>Hz</label>
                         <input type="range" id="frequency" min="20" max="2000" value="440" step="1">
                     </div>
-
-                    <div class="control-group">
-                        <label for="duration">Duration: <span id="durationValue">1.0 s</span></label>
-                        <input type="range" id="duration" min="0.1" max="5" value="1.0" step="0.1">
+                    <div class="control-group compact">
+                        <label>Wave</label>
+                        <div class="wave-buttons">
+                            <button class="wave-btn active" data-wave="sine">Sine</button>
+                            <button class="wave-btn" data-wave="square">Square</button>
+                            <button class="wave-btn" data-wave="sawtooth">Saw</button>
+                            <button class="wave-btn" data-wave="triangle">Tri</button>
+                        </div>
                     </div>
-
-                    <div class="control-group">
-                        <label for="waveform">Waveform:</label>
-                        <select id="waveform" class="dropdown">
-                            <option value="sine">Sine</option>
-                            <option value="square">Square</option>
-                            <option value="sawtooth">Sawtooth</option>
-                            <option value="triangle">Triangle</option>
-                        </select>
-                    </div>
-
-                    <button id="synthesizeBtn" class="btn btn-primary">
-                        <i class="fas fa-bolt"></i> Synthesize
-                    </button>
                 </div>
 
-                <!-- Filter Controls -->
-                <div class="control-panel">
-                    <h3><i class="fas fa-filter"></i> Filter</h3>
-                    
-                    <div class="control-group">
-                        <label for="filterType">Type:</label>
-                        <select id="filterType" class="dropdown">
-                            <option value="lowpass">Low Pass</option>
-                            <option value="highpass">High Pass</option>
-                            <option value="bandpass">Band Pass</option>
-                            <option value="none">None</option>
-                        </select>
-                    </div>
-
-                    <div class="control-group">
-                        <label for="cutoffFreq">Cutoff: <span id="cutoffValue">1000 Hz</span></label>
+                <!-- Column 2: Filter -->
+                <div class="control-column">
+                    <h3><i class="fas fa-filter"></i> FILTER</h3>
+                    <div class="control-group compact">
+                        <label>Cutoff <span id="cutoffValue">1000</span>Hz</label>
                         <input type="range" id="cutoffFreq" min="20" max="20000" value="1000" step="10">
                     </div>
-
-                    <div class="control-group">
-                        <label for="resonance">Resonance: <span id="resonanceValue">0.7</span></label>
-                        <input type="range" id="resonance" min="0.1" max="5.0" value="0.7" step="0.1">
+                    <div class="control-group compact">
+                        <label>Type</label>
+                        <div class="filter-buttons">
+                            <button class="filter-btn active" data-filter="lowpass">LP</button>
+                            <button class="filter-btn" data-filter="highpass">HP</button>
+                            <button class="filter-btn" data-filter="bandpass">BP</button>
+                            <button class="filter-btn" data-filter="none">Off</button>
+                        </div>
                     </div>
                 </div>
 
-                <!-- LFO Controls -->
-                <div class="control-panel">
-                    <h3><i class="fas fa-wave-circle"></i> LFO Modulation</h3>
-                    
-                    <div class="control-group">
-                        <label class="toggle">
+                <!-- Column 3: LFO -->
+                <div class="control-column">
+                    <h3><i class="fas fa-waveform"></i> LFO</h3>
+                    <div class="control-group compact">
+                        <label class="toggle-label">
                             <input type="checkbox" id="lfoEnabled" checked>
-                            <span class="toggle-slider"></span>
-                            Enable LFO
+                            <span class="toggle-switch"></span>
+                            Enable
                         </label>
                     </div>
-
-                    <div class="control-group">
-                        <label for="lfoFreq">Frequency: <span id="lfoFreqValue">5 Hz</span></label>
-                        <input type="range" id="lfoFreq" min="0.1" max="20" value="5" step="0.1">
+                    <div class="control-group compact">
+                        <label>Rate <span id="lfoRateValue">5</span>Hz</label>
+                        <input type="range" id="lfoRate" min="0.1" max="20" value="5" step="0.1">
                     </div>
-
-                    <div class="control-group">
-                        <label for="lfoDepth">Depth: <span id="lfoDepthValue">0.5</span></label>
-                        <input type="range" id="lfoDepth" min="0" max="1" value="0.5" step="0.05">
-                    </div>
-
-                    <div class="control-group">
-                        <label for="lfoWaveform">Waveform:</label>
-                        <select id="lfoWaveform" class="dropdown">
-                            <option value="sine">Sine</option>
-                            <option value="triangle">Triangle</option>
-                            <option value="square">Square</option>
-                            <option value="sawtooth">Sawtooth</option>
-                        </select>
+                    <div class="control-group compact">
+                        <label>Depth <span id="lfoDepthValue">50</span>%</label>
+                        <input type="range" id="lfoDepth" min="0" max="100" value="50" step="1">
                     </div>
                 </div>
             </div>
 
-            <!-- Output Visualizer -->
-            <div class="control-panel">
-                <h3><i class="fas fa-chart-line"></i> Output Visualizer</h3>
-                <div class="visualizer-container">
-                    <canvas id="outputVisualizer"></canvas>
-                    <div class="visualizer-label">Processed Output</div>
-                </div>
+            <!-- Bottom Action Bar -->
+            <div class="action-bar">
+                <button id="synthesizeBtn" class="btn-action primary">
+                    <i class="fas fa-bolt"></i> Synthesize
+                </button>
+                <button id="processBtn" class="btn-action">
+                    <i class="fas fa-cogs"></i> Process
+                </button>
+                <button id="downloadBtn" class="btn-action">
+                    <i class="fas fa-download"></i> Export
+                </button>
+                <button id="resetBtn" class="btn-action">
+                    <i class="fas fa-redo"></i> Reset
+                </button>
             </div>
-        </div>
+        </main>
 
-        <footer>
-            <div class="footer-content">
-                <p>Audio Filter PWA v1.0 | Made with Python & Flask</p>
-                <div class="footer-buttons">
-                    <button id="installBtn" class="btn btn-secondary">
-                        <i class="fas fa-download"></i> Install App
-                    </button>
-                    <button id="resetBtn" class="btn btn-secondary">
-                        <i class="fas fa-redo"></i> Reset
-                    </button>
-                </div>
-            </div>
+        <!-- Minimal Footer -->
+        <footer class="app-footer">
+            <span>Audio Filter PWA v1.0</span>
+            <span class="footer-info">
+                <i class="fas fa-microchip"></i> 
+                <span id="cpuLoad">CPU: --%</span>
+            </span>
         </footer>
     </div>
 
+    <!-- Single Notification System -->
+    <div id="notification" class="notification-hidden"></div>
+
     <!-- Audio Elements -->
-    <audio id="audioPlayer" controls style="display: none;"></audio>
-    
-    <!-- Notifications Container -->
-    <div id="notificationContainer"></div>
+    <audio id="audioPlayer" style="display: none;"></audio>
 
     <!-- Scripts -->
     <script src="/static/js/app.js"></script>
