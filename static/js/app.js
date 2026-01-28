@@ -380,4 +380,309 @@ class AudioFilterPWA {
             this.sourceNode.onended = () => {
                 this.isPlaying = false;
                 if (playBtn) {
-                    playBtn.innerHTML = '<i class
+                    playBtn.innerHTML = '<i class="fas fa-play"></i> Play';
+                }
+            };
+            
+            this.showNotification('Playing audio...', 'info');
+            
+        } catch (error) {
+            console.error('Play error:', error);
+            this.showNotification('Failed to play audio', 'error');
+        }
+    }
+    
+    stopAudio() {
+        if (this.sourceNode) {
+            this.sourceNode.stop();
+            this.sourceNode.disconnect();
+            this.sourceNode = null;
+        }
+        
+        this.isPlaying = false;
+        
+        const playBtn = document.getElementById('playBtn');
+        if (playBtn) {
+            playBtn.innerHTML = '<i class="fas fa-play"></i> Play';
+        }
+        
+        this.showNotification('Audio stopped', 'info');
+    }
+    
+    async startRecording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            this.mediaRecorder = new MediaRecorder(stream);
+            this.recordedChunks = [];
+            
+            this.mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    this.recordedChunks.push(event.data);
+                }
+            };
+            
+            this.mediaRecorder.onstop = () => {
+                this.handleRecordingStop();
+            };
+            
+            this.mediaRecorder.start();
+            this.isRecording = true;
+            
+            document.getElementById('recordBtn').disabled = true;
+            document.getElementById('stopRecordBtn').disabled = false;
+            
+            this.showNotification('Recording started...', 'info');
+            
+        } catch (error) {
+            console.error('Recording error:', error);
+            this.showNotification('Failed to start recording', 'error');
+        }
+    }
+    
+    stopRecording() {
+        if (this.mediaRecorder && this.isRecording) {
+            this.mediaRecorder.stop();
+            this.isRecording = false;
+            
+            document.getElementById('recordBtn').disabled = false;
+            document.getElementById('stopRecordBtn').disabled = true;
+        }
+    }
+    
+    async handleRecordingStop() {
+        if (this.recordedChunks.length === 0) return;
+        
+        const audioBlob = new Blob(this.recordedChunks, { type: 'audio/webm' });
+        
+        // Convert blob to audio buffer for processing
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        if (this.audioContext) {
+            const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+            const channelData = audioBuffer.getChannelData(0);
+            this.audioData = Array.from(channelData);
+            this.drawWaveform();
+            this.showNotification('Recording complete!', 'success');
+        }
+    }
+    
+    triggerUpload() {
+        document.getElementById('audioUpload').click();
+    }
+    
+    async handleAudioUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            if (this.audioContext) {
+                const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+                const channelData = audioBuffer.getChannelData(0);
+                this.audioData = Array.from(channelData).slice(0, 44100); // First second
+                this.drawWaveform();
+                this.showNotification('Audio uploaded!', 'success');
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            this.showNotification('Failed to upload audio', 'error');
+        }
+    }
+    
+    downloadAudio() {
+        if (!this.processedAudio) {
+            this.showNotification('No audio to download', 'warning');
+            return;
+        }
+        
+        // Convert float array to WAV (simplified)
+        const sampleRate = 44100;
+        const numChannels = 1;
+        const bytesPerSample = 2;
+        const blockAlign = numChannels * bytesPerSample;
+        const byteRate = sampleRate * blockAlign;
+        const dataSize = this.processedAudio.length * blockAlign;
+        
+        const buffer = new ArrayBuffer(44 + dataSize);
+        const view = new DataView(buffer);
+        
+        // Write WAV header
+        this.writeString(view, 0, 'RIFF');
+        view.setUint32(4, 36 + dataSize, true);
+        this.writeString(view, 8, 'WAVE');
+        this.writeString(view, 12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, numChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, byteRate, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, bytesPerSample * 8, true);
+        this.writeString(view, 36, 'data');
+        view.setUint32(40, dataSize, true);
+        
+        // Write audio data
+        let offset = 44;
+        for (let i = 0; i < this.processedAudio.length; i++) {
+            const sample = Math.max(-1, Math.min(1, this.processedAudio[i]));
+            view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+            offset += 2;
+        }
+        
+        // Create download link
+        const blob = new Blob([buffer], { type: 'audio/wav' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'audio_filter_output.wav';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        this.showNotification('Audio downloaded!', 'success');
+    }
+    
+    writeString(view, offset, string) {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    }
+    
+    reset() {
+        this.stopAudio();
+        this.stopRecording();
+        this.audioData = null;
+        this.processedAudio = null;
+        this.currentAudioBuffer = null;
+        
+        // Reset UI
+        document.getElementById('frequency').value = 440;
+        document.getElementById('duration').value = 1.0;
+        document.getElementById('cutoffFreq').value = 1000;
+        document.getElementById('resonance').value = 0.7;
+        document.getElementById('lfoFreq').value = 5;
+        document.getElementById('lfoDepth').value = 0.5;
+        document.getElementById('lfoEnabled').checked = true;
+        
+        this.updateUIValues();
+        this.drawWaveform();
+        this.drawVisualizers();
+        
+        this.showNotification('Reset complete', 'info');
+    }
+    
+    initPWA() {
+        // Check if PWA is installable
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            window.deferredPrompt = e;
+            const pwaStatus = document.getElementById('pwaStatus');
+            if (pwaStatus) {
+                pwaStatus.textContent = '📱 Install Available';
+            }
+        });
+        
+        // Check if already installed
+        if (window.matchMedia('(display-mode: standalone)').matches) {
+            const pwaStatus = document.getElementById('pwaStatus');
+            if (pwaStatus) {
+                pwaStatus.textContent = '📱 Installed';
+            }
+        }
+    }
+    
+    async installPWA() {
+        if (!window.deferredPrompt) {
+            this.showNotification('App can be installed from browser menu', 'info');
+            return;
+        }
+        
+        window.deferredPrompt.prompt();
+        const { outcome } = await window.deferredPrompt.userChoice;
+        
+        if (outcome === 'accepted') {
+            this.showNotification('App installed successfully!', 'success');
+            window.deferredPrompt = null;
+        }
+    }
+    
+    showNotification(message, type = 'info') {
+        const container = document.getElementById('notificationContainer') || document.body;
+        
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        
+        const icons = {
+            success: '✅',
+            error: '❌',
+            warning: '⚠️',
+            info: 'ℹ️'
+        };
+        
+        notification.innerHTML = `
+            <span class="notification-icon">${icons[type] || icons.info}</span>
+            <span class="notification-text">${message}</span>
+        `;
+        
+        // Add styles if not already present
+        if (!document.querySelector('#notification-styles')) {
+            const style = document.createElement('style');
+            style.id = 'notification-styles';
+            style.textContent = `
+                .notification {
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    padding: 12px 20px;
+                    background: white;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    z-index: 1000;
+                    animation: slideIn 0.3s ease;
+                    max-width: 300px;
+                }
+                .notification.success {
+                    border-left: 4px solid #4CAF50;
+                }
+                .notification.error {
+                    border-left: 4px solid #f44336;
+                }
+                .notification.warning {
+                    border-left: 4px solid #ff9800;
+                }
+                .notification.info {
+                    border-left: 4px solid #2196F3;
+                }
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        container.appendChild(notification);
+        
+        // Remove after 3 seconds
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }, 3000);
+    }
+}
+
+// Initialize when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    window.audioApp = new AudioFilterPWA();
+});
