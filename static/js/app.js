@@ -498,13 +498,16 @@ class AudioFilterApp {
             lfo_depth: parseFloat(document.getElementById('lfoDepth').value) / 100
         };
         
-        // Add mixing parameters
+        // Add mixing parameters only if enabled
         if (this.mixingEnabled) {
             params.mixing_enabled = true;
             params.modulation_type = this.modulationType;
             params.modulation_rate = this.modulationRate;
             params.modulation_depth = this.modulationDepth;
         }
+        
+        // Add process_type for uploaded/recorded audio
+        params.process_type = this.currentAudioSource;
         
         return params;
     }
