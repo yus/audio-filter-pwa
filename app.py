@@ -396,6 +396,106 @@ def upload_audio():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# Audio mixing route
+@app.route('/api/mix_audio', methods=['POST'])
+def mix_audio():
+    """Proper audio mixing endpoint that works with existing frontend"""
+    try:
+        data = request.json or {}
+        audio_data = data.get('audio_data', [])
+        
+        if not audio_data:
+            return jsonify({'success': False, 'error': 'No audio data provided'}), 400
+        
+        # Convert to list of floats
+        audio_data = [float(x) for x in audio_data]
+        
+        # Get mixing parameters
+        mix_enabled = data.get('mix_enabled', False)
+        mix_type = data.get('mix_type', 'compressor')  # 'compressor', 'tremolo', 'sidechain'
+        mix_rate = float(data.get('mix_rate', 5))
+        mix_depth = float(data.get('mix_depth', 0.5))
+        
+        if not mix_enabled:
+            # Just apply regular filter if mixing is disabled
+            filter_type = data.get('filter_type', 'lowpass')
+            cutoff = float(data.get('cutoff_freq', 1000))
+            resonance = float(data.get('resonance', 0.7))
+            
+            if filter_type != 'none':
+                filtered = audio_filter.apply_filter(audio_data, filter_type, cutoff, resonance)
+                return jsonify({
+                    'success': True,
+                    'processed_audio': filtered,
+                    'mixing_applied': False
+                })
+            else:
+                return jsonify({
+                    'success': True,
+                    'processed_audio': audio_data,
+                    'mixing_applied': False
+                })
+        
+        # Apply mixing effect
+        mixed_audio = []
+        sample_rate = 44100
+        
+        for i in range(len(audio_data)):
+            t = i / sample_rate
+            
+            # Generate modulation signal
+            if mix_type == 'compressor':
+                # Compressor-like effect: reduce dynamic range
+                modulation = 0.5 + 0.5 * math.sin(2 * math.pi * mix_rate * t)
+                threshold = 0.3
+                ratio = 2.0
+                
+                # Simple compression algorithm
+                sample = audio_data[i]
+                if abs(sample) > threshold:
+                    gain_reduction = 1.0 / ratio
+                    mixed_sample = sample * (threshold + (abs(sample) - threshold) * gain_reduction) * (1.0 if sample >= 0 else -1.0)
+                else:
+                    mixed_sample = sample
+                    
+                # Apply modulation
+                mixed_sample *= (1.0 - mix_depth * 0.3 * modulation)
+                
+            elif mix_type == 'tremolo':
+                # Tremolo effect: amplitude modulation
+                modulation = 0.5 + 0.5 * math.sin(2 * math.pi * mix_rate * t)
+                mixed_sample = audio_data[i] * (1.0 - mix_depth * 0.5 * modulation)
+                
+            elif mix_type == 'sidechain':
+                # Sidechain effect: rhythmic volume ducking
+                modulation = 0.5 + 0.5 * math.sin(2 * math.pi * mix_rate * t)
+                mixed_sample = audio_data[i] * (0.3 + 0.7 * modulation) * (1.0 - mix_depth * 0.7)
+                
+            else:
+                mixed_sample = audio_data[i]
+            
+            mixed_audio.append(mixed_sample)
+        
+        # Apply filter after mixing
+        filter_type = data.get('filter_type', 'lowpass')
+        cutoff = float(data.get('cutoff_freq', 1000))
+        resonance = float(data.get('resonance', 0.7))
+        
+        if filter_type != 'none':
+            mixed_audio = audio_filter.apply_filter(mixed_audio, filter_type, cutoff, resonance)
+        
+        return jsonify({
+            'success': True,
+            'processed_audio': mixed_audio,
+            'mixing_applied': True,
+            'mix_type': mix_type,
+            'original_length': len(audio_data),
+            'processed_length': len(mixed_audio)
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/process_audio', methods=['POST'])
 def process_audio():
     """Process UPLOADED/RECORDED audio only - NOT synthesized"""
