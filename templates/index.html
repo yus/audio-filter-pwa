@@ -145,82 +145,40 @@
                     </div>
                 </div>
             </div>
-
+            
             <!-- Compact Controls Grid -->
             <div class="controls-grid">
-                <!-- Column 1: Oscillator -->
-                <div class="control-column">
-                    <h3><i class="fas fa-wave-circle"></i> OSC</h3>
-                    <div class="control-group compact">
-                        <label>Freq <span id="freqValue">440</span>Hz</label>
-                        <input type="range" id="frequency" min="20" max="2000" value="440" step="1">
+                <!-- Keep only these essential controls: -->
+                <div style="margin: 5px; padding: 5px; background: #2a2a2a; border-radius: 4px;">
+                    <h3 style="margin: 0 0 5px 0; color: #88c0d0;">FILTER</h3>
+                    
+                    <!-- Filter type buttons -->
+                    <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+                        <button class="filter-btn active" data-filter="lowpass" style="flex: 1; padding: 5px; border-radius: 4px;">LP</button>
+                        <button class="filter-btn" data-filter="highpass" style="flex: 1; padding: 5px; border-radius: 4px;">HP</button>
+                        <button class="filter-btn" data-filter="bandpass" style="flex: 1; padding: 5px; border-radius: 4px;">BP</button>
+                        <button class="filter-btn" data-filter="none" style="flex: 1; padding: 5px; border-radius: 4px;">Off</button>
                     </div>
-                    <div class="control-group compact">
-                        <label>Wave</label>
-                        <div class="wave-buttons">
-                            <button class="wave-btn active" data-wave="sine">Sine</button>
-                            <button class="wave-btn" data-wave="square">Square</button>
-                            <button class="wave-btn" data-wave="sawtooth">Saw</button>
-                            <button class="wave-btn" data-wave="triangle">Tri</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Column 2: Filter -->
-                <div class="control-column">
-                    <h3><i class="fas fa-filter"></i> FILTER</h3>
-                    <div class="control-group compact">
-                        <label>Cutoff <span id="cutoffValue">1000</span>Hz</label>
-                        <input type="range" id="cutoffFreq" min="20" max="20000" value="1000" step="10">
-                    </div>
-                    <div class="control-group compact">
-                        <label>Type</label>
-                        <div class="filter-buttons">
-                            <button class="filter-btn active" data-filter="lowpass">LP</button>
-                            <button class="filter-btn" data-filter="highpass">HP</button>
-                            <button class="filter-btn" data-filter="bandpass">BP</button>
-                            <button class="filter-btn" data-filter="none">Off</button>
-                        </div>
+                    
+                    <!-- Cutoff frequency -->
+                    <div style="margin: 3px 0;">
+                        <label style="display: block; margin-bottom: 2px; font-size: 12px;">Cutoff <span id="cutoffValue">1000</span></label>
+                        <input type="range" id="cutoffFreq" min="20" max="20000" step="10" value="1000" style="width: 100%;">
                     </div>
                 </div>
-
-                <!-- Column 3: LFO -->
-                <div class="control-column">
-                    <h3><i class="fas fa-waveform"></i> LFO</h3>
-                    <div class="control-group compact">
-                        <label class="toggle-label">
-                            <input type="checkbox" id="lfoEnabled" checked>
-                            <span class="toggle-switch"></span>
-                            Enable
-                        </label>
+                
+                <!-- Action buttons -->
+                <div style="margin: 5px; padding: 5px; background: #2a2a2a; border-radius: 4px;">
+                    <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+                        <button id="uploadBtn" style="flex: 1; padding: 8px; border-radius: 4px; background: #48bb78;">Upload Audio</button>
+                        <button id="processBtn" style="flex: 1; padding: 8px; border-radius: 4px; background: #667eea;">Process</button>
                     </div>
-                    <div class="control-group compact">
-                        <label>Rate <span id="lfoRateValue">5</span>Hz</label>
-                        <input type="range" id="lfoRate" min="0.1" max="20" value="5" step="0.1">
+                    <div style="display: flex; gap: 5px;">
+                        <button id="playBtn" style="flex: 1; padding: 8px; border-radius: 4px; background: #38a169;">Play</button>
+                        <button id="stopBtn" style="flex: 1; padding: 8px; border-radius: 4px; background: #e53e3e;">Stop</button>
+                        <button id="resetBtn" style="flex: 1; padding: 8px; border-radius: 4px; background: #718096;">Reset</button>
                     </div>
-                    <div class="control-group compact">
-                        <label>Depth <span id="lfoDepthValue">50</span>%</label>
-                        <input type="range" id="lfoDepth" min="0" max="100" value="50" step="1">
-                    </div>
-                </div>
-                <!-- Mixing Controls -->
-                <div class="mixing-controls">
-                    <h4>Audio Mixing</h4>
-                    <div class="control-row">
-                        <label>Enable Mixing:</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="mixingToggle">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                    <div class="control-row">
-                        <label>Type:</label>
-                        <select id="modulationType">
-                            <option value="sidechain">Sidechain</option>
-                            <option value="tremolo">Tremolo</option>
-                        </select>
-                    </div>
-                </div>
+                </div>                
             </div>
 
             <!-- Bottom Action Bar -->
