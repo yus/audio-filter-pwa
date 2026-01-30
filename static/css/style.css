@@ -509,3 +509,240 @@ input[type="checkbox"] {
     animation: pulse 1s infinite;
     color: var(--success) !important;
 }
+/* Minimalist Design */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #1a1a1a;
+    color: #e0e0e0;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 5px;
+}
+
+.container {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 5px;
+}
+
+/* Control Groups */
+.control-group {
+    background: #2a2a2a;
+    border-radius: 4px;
+    padding: 5px;
+    margin-bottom: 5px;
+    border: 1px solid #3a3a3a;
+}
+
+.control-group h3 {
+    font-size: 14px;
+    margin-bottom: 5px;
+    color: #88c0d0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Controls */
+.control-row {
+    display: flex;
+    align-items: center;
+    margin: 3px 0;
+    gap: 5px;
+}
+
+label {
+    font-size: 12px;
+    min-width: 70px;
+    color: #b0b0b0;
+}
+
+input[type="range"],
+select,
+input[type="number"] {
+    flex: 1;
+    background: #3a3a3a;
+    border: 1px solid #4a4a4a;
+    border-radius: 2px;
+    padding: 2px 5px;
+    color: #e0e0e0;
+    font-size: 12px;
+    height: 24px;
+}
+
+input[type="range"] {
+    padding: 0;
+}
+
+input[type="number"] {
+    min-width: 60px;
+}
+
+/* Toggle Switch */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 20px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #4a4a4a;
+    transition: .2s;
+    border-radius: 10px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 2px;
+    bottom: 2px;
+    background-color: #e0e0e0;
+    transition: .2s;
+    border-radius: 50%;
+}
+
+input:checked + .toggle-slider {
+    background-color: #88c0d0;
+}
+
+input:checked + .toggle-slider:before {
+    transform: translateX(20px);
+}
+
+/* Buttons */
+.button-group {
+    display: flex;
+    gap: 5px;
+    margin-top: 5px;
+}
+
+button {
+    flex: 1;
+    background: #3a3a3a;
+    border: 1px solid #4a4a4a;
+    border-radius: 2px;
+    color: #e0e0e0;
+    padding: 5px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+button:hover {
+    background: #4a4a4a;
+}
+
+button.primary {
+    background: #5e81ac;
+    border-color: #6d8cbb;
+}
+
+button.primary:hover {
+    background: #6d8cbb;
+}
+
+button.danger {
+    background: #bf616a;
+    border-color: #ce6f78;
+}
+
+button.danger:hover {
+    background: #ce6f78;
+}
+
+/* Visualization */
+.visualization {
+    background: #1a1a1a;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    height: 100px;
+    margin: 5px 0;
+    overflow: hidden;
+}
+
+canvas {
+    width: 100%;
+    height: 100%;
+}
+
+/* Audio Source Selector */
+.audio-source {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 5px;
+}
+
+.source-btn {
+    flex: 1;
+    padding: 4px;
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 2px;
+    text-align: center;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.source-btn.active {
+    background: #5e81ac;
+    border-color: #6d8cbb;
+}
+
+/* Mixing Controls */
+.mixing-controls {
+    background: #252525;
+    border: 1px dashed #4a4a4a;
+    border-radius: 3px;
+    padding: 4px;
+    margin-top: 5px;
+}
+
+.mixing-controls h4 {
+    font-size: 12px;
+    color: #a3be8c;
+    margin-bottom: 3px;
+}
+
+/* Status */
+.status {
+    font-size: 11px;
+    color: #8fbcbb;
+    text-align: center;
+    padding: 3px;
+    background: #252525;
+    border-radius: 2px;
+    margin-top: 5px;
+}
+
+/* Mobile Responsive */
+@media (min-width: 768px) {
+    .container {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .visualization {
+        grid-column: 1 / -1;
+        height: 150px;
+    }
+}
+
