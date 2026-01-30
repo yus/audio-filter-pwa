@@ -3,22 +3,21 @@ import math
 import time
 import json
 import os
-import numpy as np
+import traceback
 from io import BytesIO
-import base64
 
 app = Flask(__name__, 
             static_folder='static',
             template_folder='templates',
             static_url_path='/static')
 
-# ========== AUDIO PROCESSING CLASSES ==========
+# ========== AUDIO PROCESSING CLASSES (No numpy) ==========
 class AudioFilter:
     def __init__(self, sample_rate=44100):
         self.sample_rate = sample_rate
         
     def apply_lowpass(self, data, cutoff_freq, resonance=0.7):
-        """Simple low-pass filter"""
+        """Simple low-pass filter without numpy"""
         if not data:
             return data
             
@@ -37,7 +36,7 @@ class AudioFilter:
         return filtered
     
     def apply_highpass(self, data, cutoff_freq, resonance=0.7):
-        """Simple high-pass filter"""
+        """Simple high-pass filter without numpy"""
         if not data:
             return data
             
@@ -75,7 +74,7 @@ class LFO:
         self.phase = 0
         
     def generate(self, frequency, waveform='sine', depth=1.0, length=1000):
-        """Generate LFO modulation signal"""
+        """Generate LFO modulation signal without numpy"""
         signal = []
         
         for i in range(length):
@@ -111,7 +110,7 @@ class AudioSynthesizer:
         
     def generate_waveform(self, frequency, duration=1.0, waveform='sine', 
                          lfo_enabled=False, lfo_freq=5, lfo_waveform='sine', lfo_depth=0.5):
-        """Generate audio waveform with optional LFO modulation"""
+        """Generate audio waveform without numpy"""
         samples = int(self.sample_rate * duration)
         audio = []
         
@@ -145,7 +144,7 @@ class AudioSynthesizer:
         return audio
     
     def apply_adsr_envelope(self, audio, duration):
-        """Apply ADSR envelope to audio"""
+        """Apply ADSR envelope without numpy"""
         if not audio:
             return audio
             
@@ -172,86 +171,22 @@ class AudioSynthesizer:
             
             audio[i] *= envelope
         
-        max_val = max(abs(x) for x in audio) if audio else 1
+        # Normalize without numpy
+        max_val = 0.0001  # Avoid division by zero
+        for sample in audio:
+            abs_sample = abs(sample)
+            if abs_sample > max_val:
+                max_val = abs_sample
+        
         if max_val > 0:
             audio = [x / max_val for x in audio]
         
         return audio
 
-class AudioMixer:
-    """New class for proper audio mixing/modulation"""
-    def __init__(self, sample_rate=44100):
-        self.sample_rate = sample_rate
-        
-    def mix_with_modulation(self, audio_data, modulation_params):
-        """
-        Mix uploaded audio with modulation (like compressor/sidechain)
-        modulation_params = {
-            'enabled': bool,
-            'modulation_type': 'sidechain' or 'tremolo',
-            'lfo_freq': float,
-            'lfo_waveform': str,
-            'lfo_depth': float,
-            'threshold': float,
-            'ratio': float,
-            'attack': float,
-            'release': float
-        }
-        """
-        if not modulation_params.get('enabled', False):
-            return audio_data
-            
-        if not audio_data:
-            return audio_data
-            
-        modulation_type = modulation_params.get('modulation_type', 'sidechain')
-        lfo_freq = modulation_params.get('lfo_freq', 5)
-        lfo_waveform = modulation_params.get('lfo_waveform', 'sine')
-        lfo_depth = modulation_params.get('lfo_depth', 0.5)
-        
-        # Generate modulation signal
-        lfo = LFO(self.sample_rate)
-        lfo_signal = lfo.generate(lfo_freq, lfo_waveform, lfo_depth, len(audio_data))
-        
-        # Normalize LFO signal to 0-1 range
-        if lfo_signal:
-            min_lfo = min(lfo_signal)
-            max_lfo = max(lfo_signal)
-            if max_lfo > min_lfo:
-                lfo_signal = [(l - min_lfo) / (max_lfo - min_lfo) for l in lfo_signal]
-        
-        mixed_audio = []
-        
-        if modulation_type == 'sidechain':
-            # Sidechain compression-like effect
-            for i, sample in enumerate(audio_data):
-                # Use LFO to modulate gain (compressor-like)
-                gain_reduction = 1.0 - (lfo_signal[i] * lfo_depth if i < len(lfo_signal) else 0)
-                mixed_audio.append(sample * gain_reduction)
-                
-        elif modulation_type == 'tremolo':
-            # Tremolo effect (amplitude modulation)
-            for i, sample in enumerate(audio_data):
-                modulation = 1.0 - (lfo_signal[i] * lfo_depth * 0.5 if i < len(lfo_signal) else 0)
-                mixed_audio.append(sample * modulation)
-                
-        else:
-            # Simple amplitude modulation
-            for i, sample in enumerate(audio_data):
-                modulation = 1.0 + (lfo_signal[i] * lfo_depth if i < len(lfo_signal) else 0)
-                mixed_audio.append(sample * modulation)
-        
-        return mixed_audio
-
 # Initialize processors
 audio_filter = AudioFilter()
 lfo = LFO()
 synthesizer = AudioSynthesizer()
-mixer = AudioMixer()
-
-# Track uploaded/recorded audio in memory
-uploaded_audio_store = {}
-recorded_audio_store = {}
 
 # ========== ROUTES ==========
 @app.route('/')
@@ -272,14 +207,14 @@ def health():
     return jsonify({
         'status': 'ok',
         'name': 'Audio Filter PWA',
-        'version': '1.1.0',
-        'features': ['synthesizer', 'filter', 'lfo', 'mixer', 'upload', 'record', 'pwa'],
+        'version': '1.0.0',
+        'features': ['synthesizer', 'filter', 'lfo', 'pwa'],
         'time': time.time()
     })
 
 @app.route('/api/generate', methods=['POST'])
 def generate():
-    """Generate waveform for visualization - SYNTHESIZED AUDIO ONLY"""
+    """Generate waveform for visualization"""
     try:
         data = request.json or {}
         
@@ -294,7 +229,7 @@ def generate():
         lfo_waveform = data.get('lfo_waveform', 'sine')
         lfo_depth = float(data.get('lfo_depth', 0.5))
         
-        # Generate audio - SYNTHESIZED ONLY
+        # Generate audio
         audio = synthesizer.generate_waveform(
             freq, duration, waveform, 
             lfo_enabled, lfo_freq, lfo_waveform, lfo_depth
@@ -310,8 +245,7 @@ def generate():
         return jsonify({
             'success': True,
             'waveform': waveform_data,
-            'full_audio': audio[:44100],
-            'audio_type': 'synthesized',
+            'full_audio': audio[:44100],  # First second of audio
             'frequency': freq,
             'duration': duration,
             'samples': len(audio),
@@ -319,11 +253,13 @@ def generate():
         })
         
     except Exception as e:
+        print(f"Error in /api/generate: {str(e)}")
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/synthesize', methods=['POST'])
 def synthesize():
-    """Synthesize complete audio - SYNTHESIZED AUDIO ONLY"""
+    """Synthesize complete audio"""
     try:
         data = request.json or {}
         
@@ -338,7 +274,7 @@ def synthesize():
         lfo_waveform = data.get('lfo_waveform', 'sine')
         lfo_depth = float(data.get('lfo_depth', 0.5))
         
-        # Generate audio - SYNTHESIZED ONLY
+        # Generate audio
         audio = synthesizer.generate_waveform(
             freq, duration, waveform, 
             lfo_enabled, lfo_freq, lfo_waveform, lfo_depth
@@ -351,172 +287,30 @@ def synthesize():
         return jsonify({
             'success': True,
             'audio': audio,
-            'audio_type': 'synthesized',
             'sample_rate': 44100,
             'duration': duration,
             'format': 'float32'
         })
         
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/upload_audio', methods=['POST'])
-def upload_audio():
-    """Handle uploaded audio - stores separately from synthesized"""
-    try:
-        data = request.json or {}
-        audio_data = data.get('audio_data', [])
-        
-        if not audio_data:
-            return jsonify({'success': False, 'error': 'No audio data provided'}), 400
-        
-        # Convert to list of floats
-        audio_data = [float(x) for x in audio_data]
-        
-        # Store with session ID
-        session_id = data.get('session_id', 'default')
-        uploaded_audio_store[session_id] = {
-            'audio': audio_data,
-            'timestamp': time.time(),
-            'length': len(audio_data)
-        }
-        
-        # Get first 1000 samples for visualization
-        waveform_data = audio_data[:1000] if len(audio_data) > 1000 else audio_data
-        
-        return jsonify({
-            'success': True,
-            'message': 'Audio uploaded successfully',
-            'waveform': waveform_data,
-            'audio_type': 'uploaded',
-            'samples': len(audio_data),
-            'session_id': session_id
-        })
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-# Audio mixing route
-@app.route('/api/mix_audio', methods=['POST'])
-def mix_audio():
-    """Proper audio mixing endpoint that works with existing frontend"""
-    try:
-        data = request.json or {}
-        audio_data = data.get('audio_data', [])
-        
-        if not audio_data:
-            return jsonify({'success': False, 'error': 'No audio data provided'}), 400
-        
-        # Convert to list of floats
-        audio_data = [float(x) for x in audio_data]
-        
-        # Get mixing parameters
-        mix_enabled = data.get('mix_enabled', False)
-        mix_type = data.get('mix_type', 'compressor')  # 'compressor', 'tremolo', 'sidechain'
-        mix_rate = float(data.get('mix_rate', 5))
-        mix_depth = float(data.get('mix_depth', 0.5))
-        
-        if not mix_enabled:
-            # Just apply regular filter if mixing is disabled
-            filter_type = data.get('filter_type', 'lowpass')
-            cutoff = float(data.get('cutoff_freq', 1000))
-            resonance = float(data.get('resonance', 0.7))
-            
-            if filter_type != 'none':
-                filtered = audio_filter.apply_filter(audio_data, filter_type, cutoff, resonance)
-                return jsonify({
-                    'success': True,
-                    'processed_audio': filtered,
-                    'mixing_applied': False
-                })
-            else:
-                return jsonify({
-                    'success': True,
-                    'processed_audio': audio_data,
-                    'mixing_applied': False
-                })
-        
-        # Apply mixing effect
-        mixed_audio = []
-        sample_rate = 44100
-        
-        for i in range(len(audio_data)):
-            t = i / sample_rate
-            
-            # Generate modulation signal
-            if mix_type == 'compressor':
-                # Compressor-like effect: reduce dynamic range
-                modulation = 0.5 + 0.5 * math.sin(2 * math.pi * mix_rate * t)
-                threshold = 0.3
-                ratio = 2.0
-                
-                # Simple compression algorithm
-                sample = audio_data[i]
-                if abs(sample) > threshold:
-                    gain_reduction = 1.0 / ratio
-                    mixed_sample = sample * (threshold + (abs(sample) - threshold) * gain_reduction) * (1.0 if sample >= 0 else -1.0)
-                else:
-                    mixed_sample = sample
-                    
-                # Apply modulation
-                mixed_sample *= (1.0 - mix_depth * 0.3 * modulation)
-                
-            elif mix_type == 'tremolo':
-                # Tremolo effect: amplitude modulation
-                modulation = 0.5 + 0.5 * math.sin(2 * math.pi * mix_rate * t)
-                mixed_sample = audio_data[i] * (1.0 - mix_depth * 0.5 * modulation)
-                
-            elif mix_type == 'sidechain':
-                # Sidechain effect: rhythmic volume ducking
-                modulation = 0.5 + 0.5 * math.sin(2 * math.pi * mix_rate * t)
-                mixed_sample = audio_data[i] * (0.3 + 0.7 * modulation) * (1.0 - mix_depth * 0.7)
-                
-            else:
-                mixed_sample = audio_data[i]
-            
-            mixed_audio.append(mixed_sample)
-        
-        # Apply filter after mixing
-        filter_type = data.get('filter_type', 'lowpass')
-        cutoff = float(data.get('cutoff_freq', 1000))
-        resonance = float(data.get('resonance', 0.7))
-        
-        if filter_type != 'none':
-            mixed_audio = audio_filter.apply_filter(mixed_audio, filter_type, cutoff, resonance)
-        
-        return jsonify({
-            'success': True,
-            'processed_audio': mixed_audio,
-            'mixing_applied': True,
-            'mix_type': mix_type,
-            'original_length': len(audio_data),
-            'processed_length': len(mixed_audio)
-        })
-        
-    except Exception as e:
+        print(f"Error in /api/synthesize: {str(e)}")
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/process_audio', methods=['POST'])
 def process_audio():
-    """Process UPLOADED/RECORDED audio only - NOT synthesized"""
+    """Process uploaded/recorded audio - FIXED without numpy"""
     try:
         data = request.json or {}
-        session_id = data.get('session_id', 'default')
-        process_type = data.get('process_type', 'uploaded')  # 'uploaded' or 'recorded'
+        audio_data = data.get('audio_data', [])
         
-        # Get the correct audio source
-        if process_type == 'uploaded':
-            if session_id not in uploaded_audio_store:
-                return jsonify({'success': False, 'error': 'No uploaded audio found'}), 404
-            audio_source = uploaded_audio_store[session_id]['audio']
-        elif process_type == 'recorded':
-            if session_id not in recorded_audio_store:
-                return jsonify({'success': False, 'error': 'No recorded audio found'}), 404
-            audio_source = recorded_audio_store[session_id]['audio']
-        else:
-            return jsonify({'success': False, 'error': 'Invalid process type'}), 400
+        if not audio_data:
+            return jsonify({'success': False, 'error': 'No audio data provided'}), 400
         
-        # Get processing parameters
+        # Convert to list of floats
+        audio_data = [float(x) for x in audio_data]
+        
+        # Get processing parameters with safe defaults
         filter_type = data.get('filter_type', 'lowpass')
         cutoff = float(data.get('cutoff_freq', 1000))
         resonance = float(data.get('resonance', 0.7))
@@ -525,178 +319,78 @@ def process_audio():
         lfo_waveform = data.get('lfo_waveform', 'sine')
         lfo_depth = float(data.get('lfo_depth', 0.5))
         
-        # NEW: Get mixing parameters
-        mixing_enabled = bool(data.get('mixing_enabled', False))
-        modulation_params = {
-            'enabled': mixing_enabled,
-            'modulation_type': data.get('modulation_type', 'sidechain'),
-            'lfo_freq': lfo_freq,
-            'lfo_waveform': lfo_waveform,
-            'lfo_depth': lfo_depth,
-            'threshold': float(data.get('threshold', 0.5)),
-            'ratio': float(data.get('ratio', 2.0)),
-            'attack': float(data.get('attack', 0.01)),
-            'release': float(data.get('release', 0.1))
-        }
+        # NEW: Get mixing parameters (provide defaults)
+        mixing_enabled = data.get('mixing_enabled', False)
+        modulation_type = data.get('modulation_type', 'sidechain')
+        modulation_rate = float(data.get('modulation_rate', 5))
+        modulation_depth = float(data.get('modulation_depth', 0.5))
+        process_type = data.get('process_type', 'uploaded')  # New parameter
         
-        # Apply processing in correct order
-        processed_audio = audio_source.copy()
+        print(f"Processing audio: type={process_type}, mixing={mixing_enabled}, modulation={modulation_type}")
         
-        # 1. First apply filter
+        # Apply filter first
         if filter_type != 'none':
-            processed_audio = audio_filter.apply_filter(processed_audio, filter_type, cutoff, resonance)
-        
-        # 2. Then apply mixing/modulation if enabled
-        if mixing_enabled:
-            processed_audio = mixer.mix_with_modulation(processed_audio, modulation_params)
-        # 3. Otherwise apply regular LFO if mixing not enabled but LFO is
-        elif lfo_enabled:
-            lfo_signal = lfo.generate(lfo_freq, lfo_waveform, lfo_depth, len(processed_audio))
-            processed_audio = [f * (1 + l * 0.3) for f, l in zip(processed_audio, lfo_signal)]
-        
-        # Store processed audio
-        processed_key = f"{session_id}_processed"
-        if process_type == 'uploaded':
-            uploaded_audio_store[processed_key] = {
-                'audio': processed_audio,
-                'timestamp': time.time(),
-                'length': len(processed_audio),
-                'source': 'processed_uploaded'
-            }
+            filtered = audio_filter.apply_filter(audio_data, filter_type, cutoff, resonance)
         else:
-            recorded_audio_store[processed_key] = {
-                'audio': processed_audio,
-                'timestamp': time.time(),
-                'length': len(processed_audio),
-                'source': 'processed_recorded'
-            }
+            filtered = audio_data
         
-        # Get visualization data
-        waveform_data = processed_audio[:1000] if len(processed_audio) > 1000 else processed_audio
+        # Apply mixing if enabled
+        if mixing_enabled:
+            mixed_audio = []
+            sample_rate = 44100
+            
+            for i in range(len(filtered)):
+                t = i / sample_rate
+                
+                if modulation_type == 'sidechain':
+                    # Sidechain compression effect
+                    modulation = 0.5 + 0.5 * math.sin(2 * math.pi * modulation_rate * t)
+                    mixed_sample = filtered[i] * (0.3 + 0.7 * modulation) * (1.0 - modulation_depth * 0.7)
+                elif modulation_type == 'tremolo':
+                    # Tremolo effect
+                    modulation = 0.5 + 0.5 * math.sin(2 * math.pi * modulation_rate * t)
+                    mixed_sample = filtered[i] * (1.0 - modulation_depth * 0.5 * modulation)
+                elif modulation_type == 'compressor':
+                    # Simple compression
+                    modulation = 0.5 + 0.5 * math.sin(2 * math.pi * modulation_rate * t)
+                    threshold = 0.3
+                    sample = filtered[i]
+                    if abs(sample) > threshold:
+                        gain_reduction = 1.0 / 2.0
+                        mixed_sample = sample * (threshold + (abs(sample) - threshold) * gain_reduction) * (1.0 if sample >= 0 else -1.0)
+                    else:
+                        mixed_sample = sample
+                    mixed_sample *= (1.0 - modulation_depth * 0.3 * modulation)
+                else:
+                    mixed_sample = filtered[i]
+                
+                mixed_audio.append(mixed_sample)
+            
+            final_audio = mixed_audio
+        else:
+            # Apply regular LFO if mixing not enabled
+            if lfo_enabled:
+                lfo_signal = lfo.generate(lfo_freq, lfo_waveform, lfo_depth, len(filtered))
+                final_audio = [f * (1 + l * 0.3) for f, l in zip(filtered, lfo_signal)]
+            else:
+                final_audio = filtered
+        
+        # Get visualization data (first 1000 samples)
+        waveform_data = final_audio[:1000] if len(final_audio) > 1000 else final_audio
         
         return jsonify({
             'success': True,
-            'processed_audio': processed_audio,
+            'processed_audio': final_audio,
             'waveform': waveform_data,
             'audio_type': 'processed_' + process_type,
-            'original_length': len(audio_source),
-            'processed_length': len(processed_audio),
-            'mixing_applied': mixing_enabled,
-            'session_id': session_id,
-            'processed_key': processed_key
+            'original_length': len(audio_data),
+            'processed_length': len(final_audio),
+            'mixing_applied': mixing_enabled
         })
         
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/record_audio', methods=['POST'])
-def record_audio():
-    """Handle microphone recording"""
-    try:
-        data = request.json or {}
-        audio_data = data.get('audio_data', [])
-        action = data.get('action', 'store')  # 'store', 'clear', 'deactivate'
-        session_id = data.get('session_id', 'default')
-        
-        if action == 'clear' or action == 'deactivate':
-            if session_id in recorded_audio_store:
-                del recorded_audio_store[session_id]
-            return jsonify({
-                'success': True,
-                'message': f'Recording {action}ed',
-                'session_id': session_id
-            })
-        
-        if not audio_data:
-            return jsonify({'success': False, 'error': 'No audio data provided'}), 400
-        
-        # Convert to list of floats
-        audio_data = [float(x) for x in audio_data]
-        
-        # Store recording
-        recorded_audio_store[session_id] = {
-            'audio': audio_data,
-            'timestamp': time.time(),
-            'length': len(audio_data),
-            'active': True
-        }
-        
-        # Get first 1000 samples for visualization
-        waveform_data = audio_data[:1000] if len(audio_data) > 1000 else audio_data
-        
-        return jsonify({
-            'success': True,
-            'message': 'Audio recorded successfully',
-            'waveform': waveform_data,
-            'audio_type': 'recorded',
-            'samples': len(audio_data),
-            'session_id': session_id,
-            'is_active': True
-        })
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/get_audio/<audio_type>/<session_id>', methods=['GET'])
-def get_audio(audio_type, session_id):
-    """Get audio data by type and session ID"""
-    try:
-        if audio_type == 'uploaded':
-            if session_id in uploaded_audio_store:
-                audio_data = uploaded_audio_store[session_id]['audio']
-                return jsonify({
-                    'success': True,
-                    'audio': audio_data[:44100],  # First second
-                    'audio_type': 'uploaded',
-                    'session_id': session_id
-                })
-        elif audio_type == 'recorded':
-            if session_id in recorded_audio_store:
-                audio_data = recorded_audio_store[session_id]['audio']
-                return jsonify({
-                    'success': True,
-                    'audio': audio_data[:44100],
-                    'audio_type': 'recorded',
-                    'session_id': session_id
-                })
-        elif audio_type == 'synthesized':
-            # For synthesized, we need parameters - can't store all combinations
-            return jsonify({'success': False, 'error': 'Use /api/synthesize for synthesized audio'}), 400
-        
-        return jsonify({'success': False, 'error': 'Audio not found'}), 404
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/clear_audio', methods=['POST'])
-def clear_audio():
-    """Clear all stored audio for a session"""
-    try:
-        data = request.json or {}
-        session_id = data.get('session_id', 'default')
-        
-        if session_id in uploaded_audio_store:
-            del uploaded_audio_store[session_id]
-        
-        if session_id in recorded_audio_store:
-            del recorded_audio_store[session_id]
-        
-        # Also clear any processed versions
-        processed_keys = [k for k in uploaded_audio_store.keys() if session_id in k]
-        for key in processed_keys:
-            del uploaded_audio_store[key]
-        
-        processed_keys = [k for k in recorded_audio_store.keys() if session_id in k]
-        for key in processed_keys:
-            del recorded_audio_store[key]
-        
-        return jsonify({
-            'success': True,
-            'message': 'Audio cleared successfully',
-            'session_id': session_id
-        })
-        
-    except Exception as e:
+        print(f"Error in /api/process_audio: {str(e)}")
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # ========== ERROR HANDLERS ==========
@@ -706,6 +400,8 @@ def not_found(e):
 
 @app.errorhandler(500)
 def server_error(e):
+    print(f"500 Error: {str(e)}")
+    traceback.print_exc()
     return jsonify({'error': 'Internal server error'}), 500
 
 # ========== APPLICATION ENTRY ==========
