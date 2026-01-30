@@ -60,10 +60,54 @@
                 </div>
             </div>
             <div class="audio-source">
-                <button class="source-btn" onclick="setAudioSource('synthesized')">Synth</button>
-                <button class="source-btn" onclick="setAudioSource('uploaded')">Upload</button>
-                <button class="source-btn" onclick="setAudioSource('recorded')">Record</button>
-                <button onclick="deactivateRecording()">Deactivate Mic</button>
+                <!-- Audio Source Selector -->
+                <div class="source-selector" style="margin: 5px; border-radius: 4px;">
+                    <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+                        <button class="source-btn active" data-source="synthesized" style="flex: 1; padding: 5px; border-radius: 4px;">Synthesized</button>
+                        <button class="source-btn" data-source="uploaded" style="flex: 1; padding: 5px; border-radius: 4px;">Upload</button>
+                        <button class="source-btn" data-source="recorded" style="flex: 1; padding: 5px; border-radius: 4px;">Record</button>
+                    </div>
+                    
+                    <!-- Upload Controls (hidden by default) -->
+                    <div id="uploadControls" style="display: none; margin-top: 5px;">
+                        <input type="file" id="audioUpload" accept="audio/*" style="width: 100%; padding: 5px; border-radius: 4px;">
+                    </div>
+                    
+                    <!-- Record Controls (hidden by default) -->
+                    <div id="recordControls" style="display: none; margin-top: 5px;">
+                        <div style="display: flex; gap: 5px;">
+                            <button id="recordBtn" style="flex: 1; padding: 5px; border-radius: 4px;">Start Recording</button>
+                            <button id="deactivateBtn" style="flex: 1; padding: 5px; border-radius: 4px;">Deactivate Mic</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Mixing Controls -->
+                <div style="margin: 5px; padding: 5px; border-radius: 4px; background: #2a2a2a;">
+                    <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                        <label style="margin-right: 10px;">Enable Mixing:</label>
+                        <input type="checkbox" id="mixingToggle">
+                    </div>
+                    
+                    <div id="mixingControls" style="display: none;">
+                        <div style="margin: 3px 0;">
+                            <label>Modulation Type:</label>
+                            <select id="modulationType" style="width: 100%; padding: 3px; border-radius: 4px;">
+                                <option value="sidechain">Sidechain</option>
+                                <option value="tremolo">Tremolo</option>
+                                <option value="compressor">Compressor</option>
+                            </select>
+                        </div>
+                        <div style="margin: 3px 0;">
+                            <label>Rate: <span id="modRateValue">5</span> Hz</label>
+                            <input type="range" id="modRate" min="0.1" max="20" step="0.1" value="5" style="width: 100%;">
+                        </div>
+                        <div style="margin: 3px 0;">
+                            <label>Depth: <span id="modDepthValue">50</span>%</label>
+                            <input type="range" id="modDepth" min="0" max="100" step="1" value="50" style="width: 100%;">
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="header-right">
                 <button id="recordBtn" class="btn-icon" title="Record">
