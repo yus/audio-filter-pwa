@@ -59,6 +59,12 @@
                     <span id="audioStatus" class="status audio">Audio</span>
                 </div>
             </div>
+            <div class="audio-source">
+                <button class="source-btn" onclick="setAudioSource('synthesized')">Synth</button>
+                <button class="source-btn" onclick="setAudioSource('uploaded')">Upload</button>
+                <button class="source-btn" onclick="setAudioSource('recorded')">Record</button>
+                <button onclick="deactivateRecording()">Deactivate Mic</button>
+            </div>
             <div class="header-right">
                 <button id="recordBtn" class="btn-icon" title="Record">
                     <i class="fas fa-microphone"></i>
@@ -151,6 +157,24 @@
                     <div class="control-group compact">
                         <label>Depth <span id="lfoDepthValue">50</span>%</label>
                         <input type="range" id="lfoDepth" min="0" max="100" value="50" step="1">
+                    </div>
+                </div>
+                <!-- Mixing Controls -->
+                <div class="mixing-controls">
+                    <h4>Audio Mixing</h4>
+                    <div class="control-row">
+                        <label>Enable Mixing:</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="mixingToggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="control-row">
+                        <label>Type:</label>
+                        <select id="modulationType">
+                            <option value="sidechain">Sidechain</option>
+                            <option value="tremolo">Tremolo</option>
+                        </select>
                     </div>
                 </div>
             </div>
