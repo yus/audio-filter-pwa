@@ -117,13 +117,25 @@ async function processAudio() {
         const cutoffSlider = document.getElementById('cutoffFreq');
         const cutoffValue = cutoffSlider ? parseFloat(cutoffSlider.value) : 1000;
         
-        // Limit data size
-        const maxSamples = 44100 * 5; // 5 seconds
-        const audioData = uploadedAudio.data.slice(0, Math.min(uploadedAudio.data.length, maxSamples));
-        const audioArray = Array.from(audioData);
+        // FIX: Create a fresh copy of the audio data
+        // The original array buffer gets detached after decoding
+        const audioData = uploadedAudio.data;
+        const audioArray = new Array(audioData.length);
+        
+        // Copy data to new array
+        for (let i = 0; i < audioData.length; i++) {
+            audioArray[i] = audioData[i];
+        }
+        
+        // Limit data size for performance (optional)
+        const maxSamples = 44100 * 10; // 10 seconds
+        const limitedArray = audioArray.length > maxSamples ? 
+            audioArray.slice(0, maxSamples) : audioArray;
+        
+        console.log('Processing', limitedArray.length, 'samples');
         
         const requestData = {
-            audio_data: audioArray,
+            audio_data: limitedArray,
             filter_type: currentFilter,
             cutoff_freq: cutoffValue,
             resonance: 0.7,
