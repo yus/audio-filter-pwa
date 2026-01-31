@@ -1,220 +1,129 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Audio Filter PWA</title>
-    <link rel="stylesheet" href="/static/css/style.css">
-    <link rel="manifest" href="/manifest.json">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <meta name="theme-color" content="#667eea">
+    <title>Audio Filter</title>
     <style>
-        /* Inline critical styles for faster loading */
-        :root {
-            --primary: #667eea;
-            --secondary: #764ba2;
-            --dark: #1a1a2e;
-            --light: #f8f9fa;
-            --success: #10b981;
-            --danger: #ef4444;
-        }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-            background: linear-gradient(135deg, var(--dark) 0%, #16213e 100%);
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: sans-serif; 
+            background: #1a1a1a; 
             color: white;
-            height: 100vh;
-            overflow: hidden;
+            padding: 10px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .container { margin: 5px; }
+        
+        .section {
+            background: #2a2a2a;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #3a3a3a;
+        }
+        
+        h3 { 
+            color: #88c0d0; 
+            margin-bottom: 10px; 
+            font-size: 16px;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 5px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            border-radius: 4px;
+            background: #3a3a3a;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        button:hover { background: #4a4a4a; }
+        button.active { background: #667eea; }
+        
+        .filter-btn.active[data-filter="lowpass"] { background: #48bb78; }
+        .filter-btn.active[data-filter="highpass"] { background: #ed8936; }
+        .filter-btn.active[data-filter="bandpass"] { background: #9f7aea; }
+        
+        .slider-group {
+            margin: 10px 0;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #ccc;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #3a3a3a;
+            outline: none;
+        }
+        
+        .visualizer {
+            width: 100%;
+            height: 200px;
+            background: #1a1a1a;
+            border-radius: 4px;
+            margin: 10px 0;
+            border: 1px solid #3a3a3a;
+        }
+        
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
         }
     </style>
 </head>
 <body>
-    <!-- Install Prompt -->
-    <div id="installPrompt" class="install-prompt">
-        <div class="install-content">
-            <i class="fas fa-download"></i>
-            <div>
-                <h4>Install Audio Filter</h4>
-                <p>For best experience, install as PWA</p>
-            </div>
-            <button id="installAccept" class="btn-install">Install</button>
-            <button id="installDismiss" class="btn-dismiss">Later</button>
-        </div>
-    </div>
-
-    <div class="app-container">
-        <!-- Header Bar -->
-        <header class="app-header">
-            <div class="header-left">
-                <h1><i class="fas fa-wave-square"></i> AudioFilter</h1>
-                <div class="status-indicators">
-                    <span id="apiStatus" class="status api">API</span>
-                    <span id="pwaStatus" class="status pwa">PWA</span>
-                    <span id="audioStatus" class="status audio">Audio</span>
-                </div>
-            </div>
-            <div class="audio-source">
-                <!-- Audio Source Selector -->
-                <div class="source-selector" style="margin: 5px; border-radius: 4px;">
-                    <div style="display: flex; gap: 5px; margin-bottom: 5px;">
-                        <button class="source-btn active" data-source="synthesized" style="flex: 1; padding: 5px; border-radius: 4px;">Synthesized</button>
-                        <button class="source-btn" data-source="uploaded" style="flex: 1; padding: 5px; border-radius: 4px;">Upload</button>
-                        <button class="source-btn" data-source="recorded" style="flex: 1; padding: 5px; border-radius: 4px;">Record</button>
-                    </div>
-                    
-                    <!-- Upload Controls (hidden by default) -->
-                    <div id="uploadControls" style="display: none; margin-top: 5px;">
-                        <input type="file" id="audioUpload" accept="audio/*" style="width: 100%; padding: 5px; border-radius: 4px;">
-                    </div>
-                    
-                    <!-- Record Controls (hidden by default) -->
-                    <div id="recordControls" style="display: none; margin-top: 5px;">
-                        <div style="display: flex; gap: 5px;">
-                            <button id="recordBtn" style="flex: 1; padding: 5px; border-radius: 4px;">Start Recording</button>
-                            <button id="deactivateBtn" style="flex: 1; padding: 5px; border-radius: 4px;">Deactivate Mic</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Mixing Controls -->
-                <div style="margin: 5px; padding: 5px; border-radius: 4px; background: #2a2a2a;">
-                    <div style="display: flex; align-items: center; margin-bottom: 5px;">
-                        <label style="margin-right: 10px;">Enable Mixing:</label>
-                        <input type="checkbox" id="mixingToggle">
-                    </div>
-                    
-                    <div id="mixingControls" style="display: none;">
-                        <div style="margin: 3px 0;">
-                            <label>Modulation Type:</label>
-                            <select id="modulationType" style="width: 100%; padding: 3px; border-radius: 4px;">
-                                <option value="sidechain">Sidechain</option>
-                                <option value="tremolo">Tremolo</option>
-                                <option value="compressor">Compressor</option>
-                            </select>
-                        </div>
-                        <div style="margin: 3px 0;">
-                            <label>Rate: <span id="modRateValue">5</span> Hz</label>
-                            <input type="range" id="modRate" min="0.1" max="20" step="0.1" value="5" style="width: 100%;">
-                        </div>
-                        <div style="margin: 3px 0;">
-                            <label>Depth: <span id="modDepthValue">50</span>%</label>
-                            <input type="range" id="modDepth" min="0" max="100" step="1" value="50" style="width: 100%;">
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="header-right">
-                <button id="recordBtn" class="btn-icon" title="Record">
-                    <i class="fas fa-microphone"></i>
-                </button>
-                <button id="uploadBtn" class="btn-icon" title="Upload">
-                    <i class="fas fa-upload"></i>
-                </button>
-                <input type="file" id="audioUpload" accept="audio/*" style="display: none;">
-            </div>
-        </header>
-
-        <!-- Main Content - Single Screen -->
-        <main class="main-content">
-            <!-- Visualizer Section -->
-            <div class="visualizer-section">
-                <div class="visualizer-container">
-                    <canvas id="waveVisualizer"></canvas>
-                    <div class="visualizer-overlay">
-                        <div class="viz-controls">
-                            <button id="playBtn" class="btn-viz">
-                                <i class="fas fa-play"></i>
-                            </button>
-                            <button id="stopBtn" class="btn-viz">
-                                <i class="fas fa-stop"></i>
-                            </button>
-                            <button id="generateBtn" class="btn-viz">
-                                <i class="fas fa-sync-alt"></i>
-                            </button>
-                        </div>
-                        <div class="viz-info">
-                            <span id="frequencyDisplay">440 Hz</span>
-                            <span id="waveformDisplay">Sine</span>
-                        </div>
-                    </div>
-                </div>
+    <div class="container">
+        <h1>Audio Filter</h1>
+        
+        <div class="section">
+            <h3>FILTER</h3>
+            <div class="button-group">
+                <button class="filter-btn active" data-filter="lowpass">Low Pass</button>
+                <button class="filter-btn" data-filter="highpass">High Pass</button>
+                <button class="filter-btn" data-filter="bandpass">Band Pass</button>
+                <button class="filter-btn" data-filter="none">Off</button>
             </div>
             
-            <!-- Compact Controls Grid -->
-            <div class="controls-grid">
-                <!-- Keep only these essential controls: -->
-                <div style="margin: 5px; padding: 5px; background: #2a2a2a; border-radius: 4px;">
-                    <h3 style="margin: 0 0 5px 0; color: #88c0d0;">FILTER</h3>
-                    
-                    <!-- Filter type buttons -->
-                    <div style="display: flex; gap: 5px; margin-bottom: 5px;">
-                        <button class="filter-btn active" data-filter="lowpass" style="flex: 1; padding: 5px; border-radius: 4px;">LP</button>
-                        <button class="filter-btn" data-filter="highpass" style="flex: 1; padding: 5px; border-radius: 4px;">HP</button>
-                        <button class="filter-btn" data-filter="bandpass" style="flex: 1; padding: 5px; border-radius: 4px;">BP</button>
-                        <button class="filter-btn" data-filter="none" style="flex: 1; padding: 5px; border-radius: 4px;">Off</button>
-                    </div>
-                    
-                    <!-- Cutoff frequency -->
-                    <div style="margin: 3px 0;">
-                        <label style="display: block; margin-bottom: 2px; font-size: 12px;">Cutoff <span id="cutoffValue">1000</span></label>
-                        <input type="range" id="cutoffFreq" min="20" max="20000" step="10" value="1000" style="width: 100%;">
-                    </div>
-                </div>
-                
-                <!-- Action buttons -->
-                <div style="margin: 5px; padding: 5px; background: #2a2a2a; border-radius: 4px;">
-                    <div style="display: flex; gap: 5px; margin-bottom: 5px;">
-                        <button id="uploadBtn" style="flex: 1; padding: 8px; border-radius: 4px; background: #48bb78;">Upload Audio</button>
-                        <button id="processBtn" style="flex: 1; padding: 8px; border-radius: 4px; background: #667eea;">Process</button>
-                    </div>
-                    <div style="display: flex; gap: 5px;">
-                        <button id="playBtn" style="flex: 1; padding: 8px; border-radius: 4px; background: #38a169;">Play</button>
-                        <button id="stopBtn" style="flex: 1; padding: 8px; border-radius: 4px; background: #e53e3e;">Stop</button>
-                        <button id="resetBtn" style="flex: 1; padding: 8px; border-radius: 4px; background: #718096;">Reset</button>
-                    </div>
-                </div>                
+            <div class="slider-group">
+                <label>Cutoff: <span id="cutoffValue">1000</span> Hz</label>
+                <input type="range" id="cutoffFreq" min="20" max="20000" step="10" value="1000">
             </div>
-
-            <!-- Bottom Action Bar -->
-            <div class="action-bar">
-                <button id="synthesizeBtn" class="btn-action primary">
-                    <i class="fas fa-bolt"></i> Synthesize
-                </button>
-                <button id="processBtn" class="btn-action">
-                    <i class="fas fa-cogs"></i> Process
-                </button>
-                <button id="downloadBtn" class="btn-action">
-                    <i class="fas fa-download"></i> Export
-                </button>
-                <button id="resetBtn" class="btn-action">
-                    <i class="fas fa-redo"></i> Reset
-                </button>
+        </div>
+        
+        <div class="visualizer">
+            <canvas id="waveVisualizer"></canvas>
+        </div>
+        
+        <div class="section">
+            <div class="button-group">
+                <button id="uploadBtn" style="background: #48bb78;">Upload Audio</button>
+                <button id="processBtn" style="background: #667eea;">Process</button>
             </div>
-        </main>
-
-        <!-- Minimal Footer -->
-        <footer class="app-footer">
-            <span>Audio Filter PWA v1.0</span>
-            <span class="footer-info">
-                <i class="fas fa-microchip"></i> 
-                <span id="cpuLoad">CPU: --%</span>
-            </span>
-        </footer>
+            <div class="button-group">
+                <button id="playBtn" style="background: #38a169;">Play</button>
+                <button id="stopBtn" style="background: #e53e3e;">Stop</button>
+                <button id="resetBtn" style="background: #718096;">Reset</button>
+            </div>
+        </div>
     </div>
-
-    <!-- Single Notification System -->
-    <div id="notification" class="notification-hidden"></div>
-
-    <!-- Audio Elements -->
-    <audio id="audioPlayer" style="display: none;"></audio>
-
-    <!-- Scripts -->
+    
     <script src="/static/js/app.js"></script>
 </body>
 </html>
