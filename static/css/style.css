@@ -746,3 +746,28 @@ canvas {
     }
 }
 
+/* Add to your existing CSS */
+#status {
+    min-height: 40px;
+    padding: 10px;
+    border-radius: 4px;
+    background: #2a2a2a;
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+.playing-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #f56565;
+    margin-right: 5px;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
