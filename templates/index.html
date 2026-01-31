@@ -106,6 +106,40 @@
             min-height: 20px;
         }
     </style>
+    <script>
+    // OVERRIDE - Delete old broken app
+    if (window.AudioFilterApp) {
+        console.log('Deleting old broken app...');
+        delete window.AudioFilterApp;
+    }
+    
+    // Simple working version
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Hotfix loaded');
+        
+        // Simple upload function
+        window.uploadAudio = function() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'audio/*';
+            input.onchange = async function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                alert('File selected: ' + file.name);
+                // Add your upload logic here
+            };
+            input.click();
+        };
+        
+        // Attach to button
+        const uploadBtn = document.getElementById('uploadBtn');
+        if (uploadBtn) {
+            uploadBtn.onclick = window.uploadAudio;
+            console.log('Upload button fixed');
+        }
+    });
+    </script>
 </head>
 <body>
     <div class="container">
