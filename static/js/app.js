@@ -1,107 +1,80 @@
-// Audio Filter PWA - Fixed Version (Works with your actual HTML)
+// Audio Filter PWA - ULTRA MINIMAL WORKING VERSION
 class AudioFilterApp {
     constructor() {
-        this.audioContext = null;
-        this.sourceNode = null;
+        console.log('Audio Filter App - Minimal Version');
         this.uploadedAudio = null;
         this.processedAudio = null;
         this.isPlaying = false;
         this.currentFilter = 'lowpass';
+        this.audioContext = null;
+        this.sourceNode = null;
         
-        console.log('Audio Filter App Starting...');
-        this.init();
+        // Wait for DOM to be fully ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => this.init());
+        } else {
+            this.init();
+        }
     }
     
     init() {
-        this.initUI();
-        this.checkAPI();
-        this.drawEmptyWaveform();
+        console.log('Initializing...');
+        
+        // Setup basic UI first
+        this.setupUI();
+        
+        // Draw empty canvas
+        this.initCanvas();
+        
+        console.log('Init complete');
     }
     
-    initUI() {
-        console.log('Initializing UI...');
+    setupUI() {
+        console.log('Setting up UI...');
         
-        // Check which elements actually exist
-        this.checkElements();
-        
-        // Filter buttons - only if they exist
-        const filterButtons = document.querySelectorAll('.filter-btn');
-        if (filterButtons.length > 0) {
-            filterButtons.forEach(btn => {
+        // 1. Setup filter buttons if they exist
+        const filterBtns = document.querySelectorAll('.filter-btn, .filter-btn');
+        if (filterBtns.length > 0) {
+            filterBtns.forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    filterButtons.forEach(b => b.classList.remove('active'));
-                    e.target.classList.add('active');
                     this.currentFilter = e.target.dataset.filter || 'lowpass';
-                    console.log('Filter set to:', this.currentFilter);
-                    this.updateUI();
-                    
-                    // Auto-process if we have audio
-                    if (this.uploadedAudio) {
-                        this.processAudio();
-                    }
+                    console.log('Filter:', this.currentFilter);
+                    // Auto-process if audio exists
+                    if (this.uploadedAudio) this.processAudio();
                 });
             });
         }
         
-        // Cutoff slider - only if it exists
+        // 2. Setup buttons with SAFE checks
+        this.setupButton('uploadBtn', () => this.uploadAudio());
+        this.setupButton('processBtn', () => this.processAudio());
+        this.setupButton('playBtn', () => this.playAudio());
+        this.setupButton('stopBtn', () => this.stopAudio());
+        this.setupButton('resetBtn', () => this.resetApp());
+        
+        // 3. Setup slider if it exists
         const cutoffSlider = document.getElementById('cutoffFreq');
         if (cutoffSlider) {
             cutoffSlider.addEventListener('input', () => {
-                this.updateUI();
-                // Auto-process on slider change
-                if (this.uploadedAudio) {
-                    this.processAudio();
-                }
+                console.log('Cutoff:', cutoffSlider.value);
+                if (this.uploadedAudio) this.processAudio();
             });
         }
         
-        // Action buttons
-        this.setupButton('playBtn', () => this.togglePlay());
-        this.setupButton('stopBtn', () => this.stopAudio());
-        this.setupButton('processBtn', () => this.processAudio());
-        this.setupButton('resetBtn', () => this.reset());
-        
-        // Upload - handle both possible upload buttons
-        const uploadBtn = document.getElementById('uploadBtn');
-        if (uploadBtn) {
-            uploadBtn.addEventListener('click', () => {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = 'audio/*';
-                input.onchange = (e) => this.handleUpload(e);
-                input.click();
-            });
-        }
-        
-        // Also check for file input directly
+        // 4. Check for direct file input
         const fileInput = document.getElementById('audioUpload');
         if (fileInput) {
-            fileInput.addEventListener('change', (e) => this.handleUpload(e));
+            fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
         }
-        
-        // Initialize canvas
-        this.initCanvas();
-        
-        console.log('UI initialized successfully');
-    }
-    
-    checkElements() {
-        console.log('Checking HTML elements...');
-        const elements = [
-            'playBtn', 'stopBtn', 'processBtn', 'resetBtn', 'uploadBtn',
-            'cutoffFreq', 'cutoffValue', 'frequency', 'waveVisualizer'
-        ];
-        
-        elements.forEach(id => {
-            const el = document.getElementById(id);
-            console.log(`${id}:`, el ? 'FOUND' : 'NOT FOUND');
-        });
     }
     
     setupButton(id, handler) {
-        const button = document.getElementById(id);
-        if (button) {
-            button.addEventListener('click', handler);
+        const btn = document.getElementById(id);
+        if (btn) {
+            btn.addEventListener('click', handler);
+            console.log(`Button ${id} setup OK`);
+        } else {
+            console.log(`Button ${id} not found`);
         }
     }
     
@@ -109,77 +82,54 @@ class AudioFilterApp {
         this.canvas = document.getElementById('waveVisualizer');
         if (this.canvas) {
             this.ctx = this.canvas.getContext('2d');
-            this.resizeCanvas();
-            window.addEventListener('resize', () => this.resizeCanvas());
-        }
-    }
-    
-    resizeCanvas() {
-        if (!this.canvas) return;
-        this.canvas.width = this.canvas.offsetWidth;
-        this.canvas.height = this.canvas.offsetHeight;
-        if (this.uploadedAudio) {
-            this.drawUploadedWaveform();
-        } else if (this.processedAudio) {
-            this.drawProcessedWaveform(this.processedAudio.data);
+            this.drawEmpty();
         } else {
-            this.drawEmptyWaveform();
+            console.log('Canvas not found');
         }
     }
     
-    updateUI() {
-        // Safely update cutoff value display
-        const cutoffValue = document.getElementById('cutoffValue');
-        const cutoffSlider = document.getElementById('cutoffFreq');
+    drawEmpty() {
+        if (!this.ctx || !this.canvas) return;
         
-        if (cutoffValue && cutoffSlider) {
-            cutoffValue.textContent = cutoffSlider.value + ' Hz';
-        }
+        const w = this.canvas.width = this.canvas.offsetWidth;
+        const h = this.canvas.height = this.canvas.offsetHeight;
         
-        // Update filter display if it exists
-        const filterDisplay = document.getElementById('filterDisplay');
-        if (filterDisplay) {
-            filterDisplay.textContent = this.currentFilter.toUpperCase();
-        }
+        this.ctx.fillStyle = '#1a1a1a';
+        this.ctx.fillRect(0, 0, w, h);
+        
+        this.ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        this.ctx.font = '14px sans-serif';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('Upload audio to begin', w/2, h/2);
+        this.ctx.textAlign = 'left';
     }
     
-    async checkAPI() {
-        try {
-            const response = await fetch('/api/health');
-            const data = await response.json();
-            console.log('Backend status:', data.status);
-            this.showNotification('Backend connected', 'success');
-            return true;
-        } catch (error) {
-            console.error('API check failed:', error);
-            this.showNotification('Cannot connect to server', 'error');
-            return false;
-        }
+    async uploadAudio() {
+        console.log('Upload button clicked');
+        
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'audio/*';
+        input.onchange = (e) => this.handleFileSelect(e);
+        input.click();
     }
     
-    // FIXED: Handle upload - SIMPLE VERSION
-    async handleUpload(event) {
+    async handleFileSelect(event) {
         const file = event.target.files[0];
         if (!file) return;
         
-        console.log('Uploading file:', file.name, file.type);
-        this.showNotification('Loading audio...');
+        console.log('File selected:', file.name);
+        this.showMessage('Loading audio...');
         
         try {
             const arrayBuffer = await file.arrayBuffer();
             
-            // Store the array buffer temporarily
-            this.uploadedArrayBuffer = arrayBuffer;
-            this.uploadedFile = file;
-            
-            // Decode audio for visualization
             if (!this.audioContext) {
                 this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
             }
             
             const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
             
-            // Store audio data
             this.uploadedAudio = {
                 buffer: audioBuffer,
                 data: audioBuffer.getChannelData(0),
@@ -187,42 +137,34 @@ class AudioFilterApp {
                 duration: audioBuffer.duration
             };
             
-            console.log(`Audio loaded: ${this.uploadedAudio.data.length} samples, ${this.uploadedAudio.duration.toFixed(2)}s`);
-            
-            // Draw waveform
-            this.drawUploadedWaveform();
-            
-            // Auto-process
-            this.processAudio();
-            
-            this.showNotification('Audio uploaded successfully');
+            console.log('Audio loaded:', this.uploadedAudio.data.length, 'samples');
+            this.drawWaveform(this.uploadedAudio.data, '#48bb78');
+            this.showMessage('Audio loaded! Click Process to filter.');
             
         } catch (error) {
             console.error('Upload error:', error);
-            this.showNotification('Upload failed: ' + error.message, 'error');
+            this.showMessage('Upload failed: ' + error.message, true);
         }
     }
     
-    // FIXED: Process audio - SIMPLE VERSION
     async processAudio() {
         if (!this.uploadedAudio) {
-            this.showNotification('Please upload audio first', 'warning');
+            this.showMessage('Please upload audio first', true);
             return;
         }
         
-        this.showNotification('Processing audio...');
+        this.showMessage('Processing...');
         
         try {
-            // Convert audio data to array (take first 44100*5 samples max to avoid large payloads)
-            const maxSamples = 44100 * 5; // 5 seconds max
-            const audioData = this.uploadedAudio.data.slice(0, Math.min(this.uploadedAudio.data.length, maxSamples));
-            const audioArray = Array.from(audioData);
-            
             // Get cutoff value safely
             const cutoffSlider = document.getElementById('cutoffFreq');
             const cutoffValue = cutoffSlider ? parseFloat(cutoffSlider.value) : 1000;
             
-            // Prepare request data
+            // Prepare data (limit to 5 seconds for performance)
+            const maxSamples = 44100 * 5;
+            const audioData = this.uploadedAudio.data.slice(0, Math.min(this.uploadedAudio.data.length, maxSamples));
+            const audioArray = Array.from(audioData);
+            
             const requestData = {
                 audio_data: audioArray,
                 filter_type: this.currentFilter,
@@ -232,11 +174,7 @@ class AudioFilterApp {
                 process_type: 'uploaded'
             };
             
-            console.log('Sending processing request:', {
-                filter: this.currentFilter,
-                cutoff: cutoffValue,
-                samples: audioArray.length
-            });
+            console.log('Sending to server:', requestData.filter_type, requestData.cutoff_freq);
             
             const response = await fetch('/api/process_audio', {
                 method: 'POST',
@@ -247,118 +185,80 @@ class AudioFilterApp {
             const data = await response.json();
             
             if (data.success) {
-                console.log('Processing successful, received:', data.processed_audio.length, 'samples');
-                
-                // Store processed audio
                 this.processedAudio = {
                     data: data.processed_audio,
-                    sampleRate: this.uploadedAudio.sampleRate,
-                    duration: data.processed_audio.length / this.uploadedAudio.sampleRate
+                    sampleRate: this.uploadedAudio.sampleRate
                 };
                 
-                // Draw processed waveform
-                this.drawProcessedWaveform(data.processed_audio);
-                
-                this.showNotification('Audio processed successfully');
+                this.drawWaveform(data.processed_audio, '#667eea');
+                this.showMessage('Processing complete! Click Play to hear.');
             } else {
-                console.error('Processing failed:', data.error);
-                this.showNotification('Processing failed: ' + data.error, 'error');
+                throw new Error(data.error || 'Processing failed');
             }
             
         } catch (error) {
             console.error('Process error:', error);
-            this.showNotification('Failed to process: ' + error.message, 'error');
+            this.showMessage('Processing failed: ' + error.message, true);
         }
     }
     
-    // FIXED: Play audio - SIMPLE AND RELIABLE
     async playAudio() {
-        // Check what we should play
-        const audioToPlay = this.processedAudio || this.uploadedAudio;
-        
-        if (!audioToPlay) {
-            this.showNotification('No audio to play', 'warning');
+        if (!this.processedAudio && !this.uploadedAudio) {
+            this.showMessage('No audio to play', true);
             return;
         }
         
-        console.log('Playing audio:', audioToPlay === this.processedAudio ? 'processed' : 'uploaded');
+        // Prefer processed audio
+        const audioToPlay = this.processedAudio || this.uploadedAudio;
+        console.log('Playing:', this.processedAudio ? 'processed' : 'original');
         
-        // Initialize audio context on user gesture
         if (!this.audioContext) {
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
         
-        // Resume if suspended
         if (this.audioContext.state === 'suspended') {
             await this.audioContext.resume();
         }
         
-        // Stop any existing playback
         this.stopAudio();
         
         try {
-            // Create audio buffer
             let audioBuffer;
             if (audioToPlay.buffer) {
-                // Already have AudioBuffer
                 audioBuffer = audioToPlay.buffer;
             } else {
-                // Create from array data
-                audioBuffer = this.audioContext.createBuffer(
-                    1, 
-                    audioToPlay.data.length, 
-                    audioToPlay.sampleRate
-                );
+                audioBuffer = this.audioContext.createBuffer(1, audioToPlay.data.length, audioToPlay.sampleRate);
+                const channel = audioBuffer.getChannelData(0);
                 
-                const channelData = audioBuffer.getChannelData(0);
-                
-                // Copy data with normalization to prevent clipping
-                let maxVal = 0.001;
+                // Normalize
+                let max = 0.001;
                 for (const sample of audioToPlay.data) {
-                    const absSample = Math.abs(sample);
-                    if (absSample > maxVal) maxVal = absSample;
+                    const abs = Math.abs(sample);
+                    if (abs > max) max = abs;
                 }
                 
-                const scale = 0.8 / maxVal;
-                
+                const scale = 0.8 / max;
                 for (let i = 0; i < audioToPlay.data.length; i++) {
-                    channelData[i] = audioToPlay.data[i] * scale;
+                    channel[i] = audioToPlay.data[i] * scale;
                 }
             }
             
-            // Create and play source
             this.sourceNode = this.audioContext.createBufferSource();
             this.sourceNode.buffer = audioBuffer;
             this.sourceNode.connect(this.audioContext.destination);
-            
             this.sourceNode.start();
             this.isPlaying = true;
             
-            // Update UI
-            const playBtn = document.getElementById('playBtn');
-            if (playBtn) playBtn.classList.add('playing');
+            this.showMessage('Playing...');
             
-            this.showNotification('Playing audio...');
-            
-            // Handle playback end
             this.sourceNode.onended = () => {
                 this.isPlaying = false;
-                if (playBtn) playBtn.classList.remove('playing');
-                this.sourceNode = null;
-                this.showNotification('Playback finished');
+                this.showMessage('Playback finished');
             };
             
         } catch (error) {
             console.error('Play error:', error);
-            this.showNotification('Failed to play: ' + error.message, 'error');
-        }
-    }
-    
-    async togglePlay() {
-        if (this.isPlaying) {
-            this.stopAudio();
-        } else {
-            await this.playAudio();
+            this.showMessage('Play failed: ' + error.message, true);
         }
     }
     
@@ -368,234 +268,78 @@ class AudioFilterApp {
                 this.sourceNode.stop();
                 this.sourceNode.disconnect();
             } catch (e) {
-                // Ignore if already stopped
+                // Ignore
             }
             this.sourceNode = null;
         }
-        
         this.isPlaying = false;
-        const playBtn = document.getElementById('playBtn');
-        if (playBtn) playBtn.classList.remove('playing');
     }
     
-    // Drawing functions
-    drawEmptyWaveform() {
-        if (!this.ctx || !this.canvas) return;
-        
-        const width = this.canvas.width;
-        const height = this.canvas.height;
-        
-        // Clear canvas
-        this.ctx.fillStyle = '#1a1a1a';
-        this.ctx.fillRect(0, 0, width, height);
-        
-        // Draw center line
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-        this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-        this.ctx.moveTo(0, height / 2);
-        this.ctx.lineTo(width, height / 2);
-        this.ctx.stroke();
-        
-        // Draw instruction text
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-        this.ctx.font = '14px sans-serif';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText('Click "Upload Audio" to begin', width / 2, height / 2);
-        this.ctx.textAlign = 'left';
-    }
-    
-    drawUploadedWaveform() {
-        if (!this.ctx || !this.canvas || !this.uploadedAudio) return;
-        
-        const width = this.canvas.width;
-        const height = this.canvas.height;
-        const data = this.uploadedAudio.data;
-        
-        // Clear canvas
-        this.ctx.fillStyle = '#1a1a1a';
-        this.ctx.fillRect(0, 0, width, height);
-        
-        // Draw center line
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-        this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-        this.ctx.moveTo(0, height / 2);
-        this.ctx.lineTo(width, height / 2);
-        this.ctx.stroke();
-        
-        // Draw waveform (green)
-        this.ctx.strokeStyle = '#48bb78';
-        this.ctx.lineWidth = 2;
-        this.ctx.beginPath();
-        
-        // Sample data for display (don't draw every point)
-        const skip = Math.max(1, Math.floor(data.length / width));
-        
-        for (let i = 0; i < data.length; i += skip) {
-            const x = (i / data.length) * width;
-            const y = (1 - (data[i] + 1) / 2) * height;
-            
-            if (i === 0) {
-                this.ctx.moveTo(x, y);
-            } else {
-                this.ctx.lineTo(x, y);
-            }
-        }
-        
-        this.ctx.stroke();
-        
-        // Draw info
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-        this.ctx.font = '12px sans-serif';
-        this.ctx.fillText(`Uploaded: ${this.uploadedAudio.duration.toFixed(2)}s`, 10, 20);
-        this.ctx.fillText(`${this.uploadedAudio.sampleRate}Hz, ${data.length} samples`, 10, 40);
-    }
-    
-    drawProcessedWaveform(processedData) {
-        if (!this.ctx || !this.canvas || !processedData || !this.uploadedAudio) return;
-        
-        const width = this.canvas.width;
-        const height = this.canvas.height;
-        const originalData = this.uploadedAudio.data;
-        
-        // Clear canvas
-        this.ctx.fillStyle = '#1a1a1a';
-        this.ctx.fillRect(0, 0, width, height);
-        
-        // Draw center line
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-        this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-        this.ctx.moveTo(0, height / 2);
-        this.ctx.lineTo(width, height / 2);
-        this.ctx.stroke();
-        
-        // Draw original waveform (faint green background)
-        this.ctx.strokeStyle = 'rgba(72, 187, 120, 0.3)';
-        this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-        
-        const skip = Math.max(1, Math.floor(originalData.length / width));
-        for (let i = 0; i < originalData.length; i += skip) {
-            const x = (i / originalData.length) * width;
-            const y = (1 - (originalData[i] + 1) / 2) * height;
-            
-            if (i === 0) {
-                this.ctx.moveTo(x, y);
-            } else {
-                this.ctx.lineTo(x, y);
-            }
-        }
-        this.ctx.stroke();
-        
-        // Draw processed waveform (blue, bold)
-        this.ctx.strokeStyle = '#667eea';
-        this.ctx.lineWidth = 2;
-        this.ctx.beginPath();
-        
-        const processedSkip = Math.max(1, Math.floor(processedData.length / width));
-        for (let i = 0; i < processedData.length; i += processedSkip) {
-            const x = (i / processedData.length) * width;
-            const y = (1 - (processedData[i] + 1) / 2) * height;
-            
-            if (i === 0) {
-                this.ctx.moveTo(x, y);
-            } else {
-                this.ctx.lineTo(x, y);
-            }
-        }
-        this.ctx.stroke();
-        
-        // Draw info
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-        this.ctx.font = '12px sans-serif';
-        this.ctx.fillText(`Filter: ${this.currentFilter}`, 10, 20);
-        
-        const cutoffSlider = document.getElementById('cutoffFreq');
-        if (cutoffSlider) {
-            this.ctx.fillText(`Cutoff: ${cutoffSlider.value}Hz`, 10, 40);
-        }
-        
-        this.ctx.fillText(`Original (green) | Processed (blue)`, 10, height - 10);
-    }
-    
-    reset() {
+    resetApp() {
         this.stopAudio();
-        
         this.uploadedAudio = null;
         this.processedAudio = null;
-        
-        // Reset filter to lowpass
-        this.currentFilter = 'lowpass';
-        const filterButtons = document.querySelectorAll('.filter-btn');
-        filterButtons.forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.dataset.filter === 'lowpass') {
-                btn.classList.add('active');
-            }
-        });
-        
-        // Reset cutoff slider if it exists
-        const cutoffSlider = document.getElementById('cutoffFreq');
-        if (cutoffSlider) {
-            cutoffSlider.value = 1000;
-        }
-        
-        this.updateUI();
-        this.drawEmptyWaveform();
-        
-        this.showNotification('Reset complete');
+        this.drawEmpty();
+        this.showMessage('Reset complete');
     }
     
-    showNotification(message, type = 'info') {
-        console.log(`${type.toUpperCase()}: ${message}`);
+    drawWaveform(data, color) {
+        if (!this.ctx || !this.canvas) return;
         
-        // Try to use existing notification element
-        let notification = document.getElementById('notification');
-        if (!notification) {
-            // Create one if it doesn't exist
-            notification = document.createElement('div');
-            notification.id = 'notification';
-            notification.style.cssText = `
+        const w = this.canvas.width = this.canvas.offsetWidth;
+        const h = this.canvas.height = this.canvas.offsetHeight;
+        
+        this.ctx.fillStyle = '#1a1a1a';
+        this.ctx.fillRect(0, 0, w, h);
+        
+        this.ctx.strokeStyle = color;
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        
+        const skip = Math.max(1, Math.floor(data.length / w));
+        
+        for (let i = 0; i < data.length; i += skip) {
+            const x = (i / data.length) * w;
+            const y = (1 - (data[i] + 1) / 2) * h;
+            
+            if (i === 0) this.ctx.moveTo(x, y);
+            else this.ctx.lineTo(x, y);
+        }
+        
+        this.ctx.stroke();
+    }
+    
+    showMessage(text, isError = false) {
+        console.log(isError ? 'ERROR:' : 'INFO:', text);
+        
+        // Try to update status element if it exists
+        const statusEl = document.getElementById('status');
+        if (statusEl) {
+            statusEl.textContent = text;
+            statusEl.style.color = isError ? '#f56565' : '#48bb78';
+        } else {
+            // Create temporary message
+            const msg = document.createElement('div');
+            msg.textContent = text;
+            msg.style.cssText = `
                 position: fixed;
                 bottom: 20px;
                 left: 50%;
                 transform: translateX(-50%);
-                padding: 10px 20px;
-                background: #2a2a2a;
+                background: ${isError ? '#f56565' : '#48bb78'};
                 color: white;
+                padding: 10px 20px;
                 border-radius: 4px;
                 font-family: sans-serif;
-                font-size: 14px;
                 z-index: 1000;
-                display: none;
-                border-left: 4px solid #667eea;
             `;
-            document.body.appendChild(notification);
+            document.body.appendChild(msg);
+            setTimeout(() => msg.remove(), 3000);
         }
-        
-        // Set color based on type
-        const colors = {
-            info: '#667eea',
-            error: '#f56565',
-            warning: '#ed8936',
-            success: '#48bb78'
-        };
-        
-        notification.textContent = message;
-        notification.style.borderLeftColor = colors[type] || colors.info;
-        notification.style.display = 'block';
-        
-        // Auto-hide
-        setTimeout(() => {
-            notification.style.display = 'none';
-        }, 3000);
     }
 }
 
-// Start the app when page loads
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM loaded, starting AudioFilterApp...');
-    window.app = new AudioFilterApp();
+// Start the app
+window.addEventListener('DOMContentLoaded', () => {
+    window.audioApp = new AudioFilterApp();
 });
