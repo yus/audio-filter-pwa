@@ -1,4 +1,4 @@
-// Audio Filter - ULTRA SIMPLE WORKING VERSION
+// Audio Filter - COMPLETE WORKING VERSION
 console.log('Audio Filter LOADING...');
 
 let uploadedAudio = null;
@@ -118,17 +118,17 @@ async function processAudio() {
         const cutoffValue = cutoffSlider ? parseFloat(cutoffSlider.value) : 1000;
         
         // FIX: Create a fresh copy of the audio data
-        // The original array buffer gets detached after decoding
+        // The original Float32Array is a view into a detached ArrayBuffer
         const audioData = uploadedAudio.data;
-        const audioArray = new Array(audioData.length);
         
-        // Copy data to new array
+        // Copy to regular JavaScript array
+        const audioArray = new Array(audioData.length);
         for (let i = 0; i < audioData.length; i++) {
             audioArray[i] = audioData[i];
         }
         
-        // Limit data size for performance (optional)
-        const maxSamples = 44100 * 10; // 10 seconds
+        // Optional: Limit to first 10 seconds for performance
+        const maxSamples = 44100 * 10; // 10 seconds max
         const limitedArray = audioArray.length > maxSamples ? 
             audioArray.slice(0, maxSamples) : audioArray;
         
@@ -143,7 +143,7 @@ async function processAudio() {
             process_type: 'uploaded'
         };
         
-        console.log('Sending to server...');
+        console.log('Sending to server...', requestData.filter_type, requestData.cutoff_freq);
         
         const response = await fetch('/api/process_audio', {
             method: 'POST',
@@ -198,7 +198,7 @@ async function playAudio() {
             audioBuffer = audioContext.createBuffer(1, audioToPlay.data.length, audioToPlay.sampleRate);
             const channel = audioBuffer.getChannelData(0);
             
-            // Normalize
+            // Normalize to prevent clipping
             let max = 0.001;
             for (const sample of audioToPlay.data) {
                 const abs = Math.abs(sample);
@@ -280,6 +280,7 @@ function drawWaveform(data, color) {
     ctx.lineWidth = 2;
     ctx.beginPath();
     
+    // Sample data for visualization (don't draw every point)
     const skip = Math.max(1, Math.floor(data.length / w));
     
     for (let i = 0; i < data.length; i += skip) {
@@ -291,6 +292,18 @@ function drawWaveform(data, color) {
     }
     
     ctx.stroke();
+    
+    // Draw info text
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = '12px sans-serif';
+    ctx.fillText(color === '#48bb78' ? 'Original (green)' : 'Processed (blue)', 10, 20);
+    
+    if (color === '#667eea') {
+        const cutoffSlider = document.getElementById('cutoffFreq');
+        if (cutoffSlider) {
+            ctx.fillText(`Filter: ${currentFilter} @ ${cutoffSlider.value}Hz`, 10, 40);
+        }
+    }
 }
 
 function showMessage(text, isError = false) {
@@ -302,7 +315,4 @@ function showMessage(text, isError = false) {
         statusEl.textContent = text;
         statusEl.style.color = isError ? '#f56565' : '#48bb78';
     }
-    
-    // Also show as alert for testing
-    if (isError) alert('ERROR: ' + text);
 }
