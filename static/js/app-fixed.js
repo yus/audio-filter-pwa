@@ -1,4 +1,4 @@
-// Audio Filter PRO - Enhanced Version with All Features
+// Audio Filter PRO - Optimized Version
 console.log('Audio Filter PRO LOADING...');
 
 class AudioFilterPro {
@@ -32,9 +32,13 @@ class AudioFilterPro {
         this.selectionEnd = null;
         this.isSelecting = false;
         
+        // Performance tracking
+        this.lastProcessTime = 0;
+        this.pendingProcess = null;
+        
         // Constants
         this.MAX_DURATION = 300; // 5 minutes max
-        this.CHUNK_SIZE = 44100 * 10; // Process in 10-second chunks
+        this.CHUNK_SIZE = 44100 * 2; // 2-second chunks for better performance
         
         this.init();
     }
@@ -73,6 +77,9 @@ class AudioFilterPro {
             this.statusEl.id = 'status';
             document.querySelector('.container').appendChild(this.statusEl);
         }
+        
+        // Progress bar
+        this.setupProgressBar();
     }
     
     setupButton(id, handler) {
@@ -84,6 +91,39 @@ class AudioFilterPro {
                 e.preventDefault();
                 handler();
             });
+        }
+    }
+    
+    setupProgressBar() {
+        let progressBar = document.getElementById('progressBar');
+        if (!progressBar) {
+            progressBar = document.createElement('div');
+            progressBar.id = 'progressBar';
+            progressBar.style.cssText = `
+                width: 100%;
+                height: 4px;
+                background: #333;
+                border-radius: 2px;
+                margin: 5px 0;
+                overflow: hidden;
+                display: none;
+            `;
+            
+            const progressFill = document.createElement('div');
+            progressFill.id = 'progressFill';
+            progressFill.style.cssText = `
+                width: 0%;
+                height: 100%;
+                background: linear-gradient(90deg, #48bb78, #667eea);
+                transition: width 0.2s;
+            `;
+            
+            progressBar.appendChild(progressFill);
+            
+            const statusEl = document.getElementById('status');
+            if (statusEl && statusEl.parentNode) {
+                statusEl.parentNode.insertBefore(progressBar, statusEl.nextSibling);
+            }
         }
     }
     
@@ -116,7 +156,6 @@ class AudioFilterPro {
         const controlsContainer = document.getElementById('filterControls');
         if (!controlsContainer) return;
         
-        // Create control panels for each filter type
         const filterPanels = {
             lowpass: this.createFilterPanel('lowpass', ['freq', 'q']),
             highpass: this.createFilterPanel('highpass', ['freq', 'q']),
@@ -132,7 +171,6 @@ class AudioFilterPro {
             controlsContainer.appendChild(panel);
         });
         
-        // Show only active filter panel
         this.updateFilterUI();
     }
     
@@ -141,7 +179,6 @@ class AudioFilterPro {
         panel.className = `filter-panel ${filterType}-panel`;
         panel.dataset.filter = filterType;
         
-        // Enable/disable toggle
         const toggle = document.createElement('div');
         toggle.className = 'filter-toggle';
         toggle.innerHTML = `
@@ -153,7 +190,6 @@ class AudioFilterPro {
         `;
         panel.appendChild(toggle);
         
-        // Control knobs
         const knobs = document.createElement('div');
         knobs.className = 'filter-knobs';
         
@@ -172,7 +208,6 @@ class AudioFilterPro {
         
         panel.appendChild(knobs);
         
-        // Add event listeners after panel is added to DOM
         setTimeout(() => {
             this.attachKnobListeners(panel, filterType);
         }, 0);
@@ -228,58 +263,67 @@ class AudioFilterPro {
     }
     
     attachKnobListeners(panel, filterType) {
-        // Enable/disable toggle
         const toggle = panel.querySelector('.filter-enabled');
         if (toggle) {
             toggle.addEventListener('change', (e) => {
                 this.filters[filterType].enabled = e.target.checked;
                 this.updateFilterUI();
                 this.saveToHistory('filter-toggle');
-                if (this.uploadedAudio) this.processAudio();
+                this.debounceProcess();
             });
         }
         
-        // Knob sliders
         panel.querySelectorAll('.knob-slider').forEach(slider => {
             slider.addEventListener('input', (e) => {
                 const param = e.target.dataset.param;
                 const value = parseFloat(e.target.value);
                 
-                // Update filter value
                 if (param === 'freq1' || param === 'freq2') {
                     this.filters[filterType][param] = value;
                 } else {
                     this.filters[filterType][param] = value;
                 }
                 
-                // Update knob indicator
                 const knob = e.target.closest('.knob');
                 const indicator = knob.querySelector('.knob-indicator');
                 const min = parseFloat(e.target.min);
                 const max = parseFloat(e.target.max);
                 indicator.style.transform = `rotate(${this.valueToAngle(value, min, max)}deg)`;
                 
-                // Update value display
                 const valueDisplay = panel.querySelector(`.knob-value[data-param="${param}"]`);
                 if (valueDisplay) {
                     valueDisplay.textContent = this.formatValue(value, param);
                 }
                 
-                // Update filter response visualization
                 this.updateFilterResponse();
-                
-                // Debounce processing
-                if (this.processTimeout) clearTimeout(this.processTimeout);
-                this.processTimeout = setTimeout(() => {
-                    if (this.uploadedAudio) this.processAudio();
-                }, 300);
+                this.debounceProcess();
             });
         });
     }
     
+    // OPTIMIZATION: Debounce processing to avoid too many requests
+    debounceProcess() {
+        if (this.pendingProcess) {
+            clearTimeout(this.pendingProcess);
+        }
+        
+        // Only process if we have audio and enough time has passed
+        if (!this.uploadedAudio || this.isProcessing) return;
+        
+        const now = Date.now();
+        const timeSinceLastProcess = now - this.lastProcessTime;
+        
+        // If we processed recently, wait longer
+        const delay = timeSinceLastProcess < 2000 ? 800 : 300;
+        
+        this.pendingProcess = setTimeout(() => {
+            this.processAudio();
+        }, delay);
+    }
+    
     valueToAngle(value, min, max) {
         const percentage = (value - min) / (max - min);
-        return -135 + (percentage * 270); // -135° to 135° range
+        return -135 + (percentage * 270);
     }
     
     formatValue(value, param) {
@@ -297,7 +341,6 @@ class AudioFilterPro {
     }
     
     activateFilterTab(filterId) {
-        // Update tabs
         document.querySelectorAll('.filter-tab').forEach(tab => {
             tab.classList.remove('active');
             if (tab.dataset.filter === filterId) {
@@ -305,20 +348,17 @@ class AudioFilterPro {
             }
         });
         
-        // Show corresponding panel
         document.querySelectorAll('.filter-panel').forEach(panel => {
             panel.style.display = panel.dataset.filter === filterId ? 'block' : 'none';
         });
     }
     
     updateFilterUI() {
-        // Update which panels are visible based on active tab
         const activeTab = document.querySelector('.filter-tab.active');
         if (activeTab) {
             this.activateFilterTab(activeTab.dataset.filter);
         }
         
-        // Update toggle states
         Object.entries(this.filters).forEach(([type, filter]) => {
             const toggle = document.querySelector(`.filter-enabled[data-filter="${type}"]`);
             if (toggle) toggle.checked = filter.enabled;
@@ -337,7 +377,6 @@ class AudioFilterPro {
     }
     
     setupCanvasEvents() {
-        // Selection handling
         this.canvas.addEventListener('mousedown', (e) => {
             const rect = this.canvas.getBoundingClientRect();
             const x = (e.clientX - rect.left) / this.canvas.width;
@@ -372,7 +411,6 @@ class AudioFilterPro {
             }
         });
         
-        // Zoom with wheel
         this.canvas.addEventListener('wheel', (e) => {
             e.preventDefault();
             if (e.deltaY < 0) {
@@ -454,9 +492,9 @@ class AudioFilterPro {
         }
     }
     
-    // Add to your AudioFilterPro class - optimized chunk processing
-    
+    // OPTIMIZED: Process audio with progress and performance improvements
     async processAudio() {
+        // FIX: Don't process if reset or no audio
         if (!this.uploadedAudio) {
             this.showMessage('Please upload audio first', true);
             return;
@@ -465,77 +503,87 @@ class AudioFilterPro {
         if (this.isProcessing) return;
         
         this.isProcessing = true;
+        this.lastProcessTime = Date.now();
+        
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+        if (progressBar) progressBar.style.display = 'block';
+        
         this.showMessage('Processing audio...');
         
         try {
-            // Get enabled filters
             const activeFilters = Object.values(this.filters).filter(f => f.enabled);
-            console.log('Active filters:', activeFilters.map(f => f.type));
+            
+            if (activeFilters.length === 0) {
+                this.processedAudio = {
+                    data: this.uploadedAudio.data,
+                    sampleRate: this.uploadedAudio.sampleRate,
+                    duration: this.uploadedAudio.duration
+                };
+                this.drawWaveform();
+                this.showMessage('No filters enabled - using original audio');
+                return;
+            }
             
             const audioData = this.uploadedAudio.data;
             const sampleRate = this.uploadedAudio.sampleRate;
             
-            // FIX 1: Calculate optimal chunk size (2 seconds for smoothness)
-            const chunkSeconds = 2;
+            // OPTIMIZATION: Adaptive chunk sizing based on file length
+            const duration = audioData.length / sampleRate;
+            let chunkSeconds = 2;
+            
+            if (duration > 120) chunkSeconds = 5;      // >2 min: 5s chunks
+            if (duration > 300) chunkSeconds = 10;     // >5 min: 10s chunks
+            
             const chunkSize = Math.floor(sampleRate * chunkSeconds);
+            const totalChunks = Math.ceil(audioData.length / chunkSize);
             
-            console.log(`Audio length: ${audioData.length} samples (${(audioData.length/sampleRate).toFixed(2)}s)`);
-            console.log(`Chunk size: ${chunkSize} samples (${chunkSeconds}s)`);
+            console.log(`Processing ${totalChunks} chunks (${chunkSeconds}s each)`);
             
-            // Process chunks sequentially to maintain continuity
             const processedChunks = [];
             let totalProcessed = 0;
             
-            for (let start = 0; start < audioData.length; start += chunkSize) {
+            for (let i = 0; i < totalChunks; i++) {
+                const start = i * chunkSize;
                 const end = Math.min(start + chunkSize, audioData.length);
                 const chunk = audioData.slice(start, end);
                 
-                console.log(`Processing chunk ${processedChunks.length + 1}: ${start} - ${end} (${chunk.length} samples)`);
-                
-                // Convert to regular array for processing
+                // Convert to array once
                 const chunkArray = Array.from(chunk);
                 
-                // Apply filters in sequence
+                // Apply filters sequentially
                 let processedChunk = chunkArray;
                 for (const filter of activeFilters) {
                     processedChunk = await this.applyFilter(processedChunk, filter);
                 }
                 
-                // FIX 2: Store the processed chunk directly (no gaps)
                 processedChunks.push(processedChunk);
                 totalProcessed += processedChunk.length;
                 
-                // Update progress
-                const progress = Math.floor((end / audioData.length) * 100);
+                // Update progress smoothly
+                const progress = Math.floor((i + 1) / totalChunks * 100);
+                if (progressFill) progressFill.style.width = progress + '%';
                 this.showMessage(`Processing: ${progress}%`);
                 
-                // Small yield to keep UI responsive
-                await new Promise(resolve => setTimeout(resolve, 0));
+                // Yield less frequently for better performance
+                if (i % 10 === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
             }
             
-            console.log(`Total processed samples: ${totalProcessed}`);
-            console.log(`Original samples: ${audioData.length}`);
-            
-            // FIX 3: Direct concatenation without any gaps
-            // Pre-allocate exact size
+            // Combine chunks efficiently
             const combined = new Float32Array(totalProcessed);
-            
             let offset = 0;
             for (const chunk of processedChunks) {
                 combined.set(chunk, offset);
                 offset += chunk.length;
             }
             
-            // Verify we didn't create gaps
-            console.log(`Combined array length: ${combined.length}`);
-            
             this.processedAudio = {
                 data: combined,
                 sampleRate: sampleRate,
                 duration: combined.length / sampleRate
             };
-            
-            console.log(`Processed duration: ${this.processedAudio.duration.toFixed(2)}s`);
             
             this.drawWaveform();
             this.showMessage('Processing complete! Click Play to hear.');
@@ -545,12 +593,17 @@ class AudioFilterPro {
             this.showMessage('Processing failed: ' + error.message, true);
         } finally {
             this.isProcessing = false;
+            if (progressBar) progressBar.style.display = 'none';
         }
     }
     
-    // FIX 4: Ensure applyFilter returns the EXACT same length array
+    // FIX: Better error handling in applyFilter
     async applyFilter(audioData, filter) {
-        // Send to backend
+        // Don't process if no audio or during reset
+        if (!audioData || audioData.length === 0) {
+            return audioData;
+        }
+        
         try {
             const response = await fetch('/api/process_audio', {
                 method: 'POST',
@@ -564,153 +617,42 @@ class AudioFilterPro {
                 })
             });
             
+            if (!response.ok) {
+                // Don't throw on reset (404 is expected if server restarted)
+                if (response.status === 404) {
+                    console.warn('Filter endpoint not found - using original audio');
+                    return audioData;
+                }
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
             const data = await response.json();
             
             if (data.success) {
-                // FIX: Verify length matches
+                // Ensure length matches
                 if (data.processed_audio.length !== audioData.length) {
-                    console.warn(`Filter changed length: ${audioData.length} → ${data.processed_audio.length}`);
-                    // Pad or trim to maintain length
+                    console.warn(`Length mismatch: ${audioData.length} → ${data.processed_audio.length}`);
                     if (data.processed_audio.length < audioData.length) {
-                        // Pad with zeros at the end
                         const padded = new Array(audioData.length).fill(0);
                         padded.splice(0, data.processed_audio.length, ...data.processed_audio);
                         return padded;
                     } else {
-                        // Trim to original length
                         return data.processed_audio.slice(0, audioData.length);
                     }
                 }
                 return data.processed_audio;
             } else {
-                throw new Error(data.error || 'Filter failed');
+                console.warn('Filter failed:', data.error);
+                return audioData;
             }
         } catch (error) {
-            console.error('Filter error:', error);
-            // Return original audio on error
+            // Silently fail and return original audio - prevents reset errors
+            console.warn('Filter error (using original):', error.message);
             return audioData;
         }
     }
     
-    // FIX 5: Debug helper to visualize chunks
-    debugChunks() {
-        if (!this.processedAudio) return;
-        
-        const data = this.processedAudio.data;
-        const sampleRate = this.processedAudio.sampleRate;
-        
-        // Find silent regions
-        let silentRegions = [];
-        let inSilence = false;
-        let silenceStart = 0;
-        
-        for (let i = 0; i < data.length; i++) {
-            const isSilent = Math.abs(data[i]) < 0.001;
-            
-            if (isSilent && !inSilence) {
-                inSilence = true;
-                silenceStart = i;
-            } else if (!isSilent && inSilence) {
-                inSilence = false;
-                const duration = (i - silenceStart) / sampleRate;
-                if (duration > 0.1) { // Only report silences > 100ms
-                    silentRegions.push({
-                        start: silenceStart / sampleRate,
-                        end: i / sampleRate,
-                        duration: duration
-                    });
-                }
-            }
-        }
-        
-        console.log('Silent regions:', silentRegions);
-        return silentRegions;
-    }
-
-    // OPTIMIZATION 4: Add a progress bar for visual feedback
-    addProgressBar() {
-        // Check if progress bar exists
-        let progressBar = document.getElementById('progressBar');
-        if (!progressBar) {
-            progressBar = document.createElement('div');
-            progressBar.id = 'progressBar';
-            progressBar.style.cssText = `
-                width: 100%;
-                height: 4px;
-                background: #333;
-                border-radius: 2px;
-                margin: 5px 0;
-                overflow: hidden;
-                display: none;
-            `;
-            
-            const progressFill = document.createElement('div');
-            progressFill.id = 'progressFill';
-            progressFill.style.cssText = `
-                width: 0%;
-                height: 100%;
-                background: linear-gradient(90deg, #48bb78, #667eea);
-                transition: width 0.2s;
-            `;
-            
-            progressBar.appendChild(progressFill);
-            
-            // Insert after status
-            const statusEl = document.getElementById('status');
-            if (statusEl && statusEl.parentNode) {
-                statusEl.parentNode.insertBefore(progressBar, statusEl.nextSibling);
-            }
-        }
-        return progressBar;
-    }
-    
-    // Update showMessage to handle progress
-    showMessage(text, isError = false, progress = null) {
-        console.log(isError ? 'ERROR:' : 'INFO:', text);
-        
-        if (this.statusEl) {
-            this.statusEl.textContent = text;
-            this.statusEl.style.color = isError ? '#f56565' : '#48bb78';
-        }
-        
-        // Handle progress bar
-        const progressBar = document.getElementById('progressBar');
-        const progressFill = document.getElementById('progressFill');
-        
-        if (progress !== null && progressBar && progressFill) {
-            progressBar.style.display = 'block';
-            progressFill.style.width = progress + '%';
-        } else if (progressBar) {
-            progressBar.style.display = 'none';
-        }
-    }
-
-    // OPTIMIZATION 5: Web Worker for background processing (optional but powerful)
-    // Add this method to create a processing worker
-    createProcessingWorker() {
-        const workerCode = `
-            self.onmessage = function(e) {
-                const { chunk, filterType, freq } = e.data;
-                
-                // Simple filter simulation - replace with actual filter logic
-                const processed = chunk.map((sample, i) => {
-                    if (filterType === 'lowpass') {
-                        const f = freq / 20000;
-                        return sample * (1 - Math.min(1, i * f / 1000));
-                    }
-                    return sample;
-                });
-                
-                self.postMessage({ processed });
-            };
-        `;
-        
-        const blob = new Blob([workerCode], { type: 'application/javascript' });
-        return new Worker(URL.createObjectURL(blob));
-    }
-    
     updateFilterResponse() {
-        // Visualize filter frequency response
         const canvas = document.getElementById('filterResponse');
         if (!canvas) return;
         
@@ -730,7 +672,7 @@ class AudioFilterPro {
         }
         ctx.stroke();
         
-        // Draw response curves for enabled filters
+        // Draw response curves
         ctx.strokeStyle = '#667eea';
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -738,11 +680,10 @@ class AudioFilterPro {
         const activeFilters = Object.values(this.filters).filter(f => f.enabled);
         
         for (let x = 0; x < w; x++) {
-            const freq = 20 * Math.pow(1000, x / w); // 20Hz to 20kHz log scale
+            const freq = 20 * Math.pow(1000, x / w);
             let gain = 0;
             
             activeFilters.forEach(filter => {
-                // Simple filter response calculation
                 if (filter.type === 'lowpass') {
                     gain += -3 * Math.log10(1 + Math.pow(freq / filter.freq, 2));
                 } else if (filter.type === 'highpass') {
@@ -757,32 +698,6 @@ class AudioFilterPro {
         }
         
         ctx.stroke();
-    }
-
-    // Add to your class for debugging
-    drawChunkBoundaries() {
-        if (!this.ctx || !this.canvas || !this.processedAudio) return;
-        
-        const w = this.canvas.width;
-        const h = this.canvas.height;
-        const data = this.processedAudio.data;
-        const sampleRate = this.processedAudio.sampleRate;
-        const chunkSize = 44100 * 2; // 2-second chunks
-        
-        // Draw chunk boundaries in red
-        this.ctx.strokeStyle = '#ff0000';
-        this.ctx.lineWidth = 1;
-        this.ctx.setLineDash([5, 3]);
-        
-        for (let start = 0; start < data.length; start += chunkSize) {
-            const x = (start / data.length) * w;
-            this.ctx.beginPath();
-            this.ctx.moveTo(x, 0);
-            this.ctx.lineTo(x, h);
-            this.ctx.stroke();
-        }
-        
-        this.ctx.setLineDash([]);
     }
     
     drawWaveform() {
@@ -806,7 +721,6 @@ class AudioFilterPro {
         this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
         this.ctx.lineWidth = 0.5;
         
-        // Vertical grid (time)
         for (let i = 1; i < 10; i++) {
             const x = (i / 10) * w;
             this.ctx.beginPath();
@@ -815,7 +729,6 @@ class AudioFilterPro {
             this.ctx.stroke();
         }
         
-        // Horizontal grid (amplitude)
         for (let i = 1; i < 5; i++) {
             const y = (i / 5) * h;
             this.ctx.beginPath();
@@ -837,7 +750,7 @@ class AudioFilterPro {
         this.ctx.lineTo(w, h/2);
         this.ctx.stroke();
         
-        // Calculate visible range based on zoom and selection
+        // Calculate visible range
         let startIndex = 0;
         let endIndex = data.length;
         
@@ -870,7 +783,7 @@ class AudioFilterPro {
         
         this.ctx.stroke();
         
-        // Draw selection overlay
+        // Draw selection
         if (this.selectionStart !== null && this.selectionEnd !== null) {
             const x1 = Math.min(this.selectionStart, this.selectionEnd) * w;
             const x2 = Math.max(this.selectionStart, this.selectionEnd) * w;
@@ -883,12 +796,8 @@ class AudioFilterPro {
             this.ctx.strokeRect(x1, 0, x2 - x1, h);
         }
         
-        // Draw time ruler
+        // Draw ruler
         this.drawRuler();
-        // Add debug visualization if in debug mode
-        if (window.debugMode) {
-            this.drawChunkBoundaries();
-        }
     }
     
     drawRuler() {
@@ -903,16 +812,13 @@ class AudioFilterPro {
         this.ctx.font = '9px monospace';
         this.ctx.textAlign = 'center';
         
-        // Time markers
         for (let i = 0; i <= 10; i++) {
             const t = i / 10;
             const x = t * w;
             const time = (t * duration).toFixed(1);
-            
             this.ctx.fillText(time + 's', x, h - 5);
         }
         
-        // Sample rate info
         this.ctx.textAlign = 'right';
         this.ctx.fillText(`${this.uploadedAudio.sampleRate}Hz`, w - 10, 20);
     }
@@ -965,7 +871,6 @@ class AudioFilterPro {
             
             const channelData = audioBuffer.getChannelData(0);
             
-            // Copy with normalization
             let maxAmp = 0.001;
             for (const sample of audioToPlay.data) {
                 const abs = Math.abs(sample);
@@ -1008,7 +913,6 @@ class AudioFilterPro {
     }
     
     saveToHistory(action) {
-        // Save current state
         const state = {
             filters: JSON.parse(JSON.stringify(this.filters)),
             processedAudio: this.processedAudio ? {
@@ -1019,7 +923,6 @@ class AudioFilterPro {
             timestamp: Date.now()
         };
         
-        // Remove future states if we're not at the end
         if (this.historyIndex < this.history.length - 1) {
             this.history = this.history.slice(0, this.historyIndex + 1);
         }
@@ -1027,7 +930,6 @@ class AudioFilterPro {
         this.history.push(state);
         this.historyIndex++;
         
-        // Limit history size
         if (this.history.length > this.maxHistory) {
             this.history.shift();
             this.historyIndex--;
@@ -1073,25 +975,21 @@ class AudioFilterPro {
     
     setupKeyboardShortcuts() {
         document.addEventListener('keydown', (e) => {
-            // Ctrl+Z for undo
             if (e.ctrlKey && e.key === 'z') {
                 e.preventDefault();
                 this.undo();
             }
             
-            // Ctrl+Y or Ctrl+Shift+Z for redo
             if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) {
                 e.preventDefault();
                 this.redo();
             }
             
-            // Space for play/pause
             if (e.key === ' ' && !e.ctrlKey && !e.altKey) {
                 e.preventDefault();
                 this.togglePlay();
             }
             
-            // +/- for zoom
             if (e.key === '+' || e.key === '=') {
                 e.preventDefault();
                 this.zoomIn();
@@ -1102,7 +1000,6 @@ class AudioFilterPro {
                 this.zoomOut();
             }
             
-            // 0 for fit view
             if (e.key === '0') {
                 e.preventDefault();
                 this.fitView();
@@ -1112,6 +1009,12 @@ class AudioFilterPro {
     
     reset() {
         this.stopAudio();
+        
+        // Cancel any pending processing
+        if (this.pendingProcess) {
+            clearTimeout(this.pendingProcess);
+            this.pendingProcess = null;
+        }
         
         // Reset filters
         Object.keys(this.filters).forEach(key => {
@@ -1127,6 +1030,7 @@ class AudioFilterPro {
         this.selectionStart = null;
         this.selectionEnd = null;
         this.zoomLevel = 1.0;
+        this.isProcessing = false;
         
         this.updateFilterUI();
         this.drawWaveform();
