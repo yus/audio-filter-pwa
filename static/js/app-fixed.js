@@ -9,8 +9,8 @@ let currentFilter = 'lowpass';
 let isProcessing = false;
 
 // Constants
-const MAX_DURATION = 30; // Maximum 30 seconds
-const MAX_SAMPLES = 44100 * MAX_DURATION; // ~1.3M samples
+const MAX_DURATION = 180; // Maximum 30 seconds
+const MAX_SAMPLES = 44100 * MAX_DURATION; // ~7.8M samples
 
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', function() {
