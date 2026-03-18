@@ -455,8 +455,6 @@ class AudioFilterPro {
     }
     
     // Add to your AudioFilterPro class - optimized chunk processing
-
-    // Replace your existing processAudio method with this optimized version:
     
     async processAudio() {
         if (!this.uploadedAudio) {
@@ -470,68 +468,57 @@ class AudioFilterPro {
         this.showMessage('Processing audio...');
         
         try {
-            const audioData = this.uploadedAudio.data;
-            
-            // OPTIMIZATION 1: Adaptive chunk sizing based on file length
-            // Use larger chunks for long files to reduce number of pauses
-            const totalDuration = audioData.length / this.uploadedAudio.sampleRate;
-            let chunkSize = this.CHUNK_SIZE;
-            
-            if (totalDuration > 300) { // > 5 minutes
-                chunkSize = 44100 * 30; // 30-second chunks for very long files
-            } else if (totalDuration > 120) { // > 2 minutes
-                chunkSize = 44100 * 20; // 20-second chunks
-            }
-            
-            // Create chunks with adaptive size
-            const chunks = [];
-            for (let i = 0; i < audioData.length; i += chunkSize) {
-                const chunk = audioData.slice(i, Math.min(i + chunkSize, audioData.length));
-                chunks.push(chunk);
-            }
-            
-            console.log(`Processing ${chunks.length} chunks (${chunkSize/44100}s each)...`);
-            
             // Get enabled filters
             const activeFilters = Object.values(this.filters).filter(f => f.enabled);
+            console.log('Active filters:', activeFilters.map(f => f.type));
             
-            // OPTIMIZATION 2: Parallel processing with controlled concurrency
+            const audioData = this.uploadedAudio.data;
+            const sampleRate = this.uploadedAudio.sampleRate;
+            
+            // FIX 1: Calculate optimal chunk size (2 seconds for smoothness)
+            const chunkSeconds = 2;
+            const chunkSize = Math.floor(sampleRate * chunkSeconds);
+            
+            console.log(`Audio length: ${audioData.length} samples (${(audioData.length/sampleRate).toFixed(2)}s)`);
+            console.log(`Chunk size: ${chunkSize} samples (${chunkSeconds}s)`);
+            
+            // Process chunks sequentially to maintain continuity
             const processedChunks = [];
-            const concurrencyLimit = 3; // Process up to 3 chunks simultaneously
+            let totalProcessed = 0;
             
-            for (let i = 0; i < chunks.length; i += concurrencyLimit) {
-                const batch = chunks.slice(i, Math.min(i + concurrencyLimit, chunks.length));
+            for (let start = 0; start < audioData.length; start += chunkSize) {
+                const end = Math.min(start + chunkSize, audioData.length);
+                const chunk = audioData.slice(start, end);
                 
-                // Process batch in parallel
-                const batchResults = await Promise.all(
-                    batch.map(async (chunk, index) => {
-                        const chunkArray = Array.from(chunk);
-                        let processedChunk = chunkArray;
-                        
-                        for (const filter of activeFilters) {
-                            processedChunk = await this.applyFilter(processedChunk, filter);
-                        }
-                        
-                        // Update progress less frequently to reduce UI thrashing
-                        if ((i + index) % 5 === 0) {
-                            const percent = Math.round(((i + index) / chunks.length) * 100);
-                            this.showMessage(`Processing: ${percent}%`);
-                        }
-                        
-                        return processedChunk;
-                    })
-                );
+                console.log(`Processing chunk ${processedChunks.length + 1}: ${start} - ${end} (${chunk.length} samples)`);
                 
-                processedChunks.push(...batchResults);
+                // Convert to regular array for processing
+                const chunkArray = Array.from(chunk);
                 
-                // Small delay between batches to keep UI responsive
-                await new Promise(resolve => setTimeout(resolve, 10));
+                // Apply filters in sequence
+                let processedChunk = chunkArray;
+                for (const filter of activeFilters) {
+                    processedChunk = await this.applyFilter(processedChunk, filter);
+                }
+                
+                // FIX 2: Store the processed chunk directly (no gaps)
+                processedChunks.push(processedChunk);
+                totalProcessed += processedChunk.length;
+                
+                // Update progress
+                const progress = Math.floor((end / audioData.length) * 100);
+                this.showMessage(`Processing: ${progress}%`);
+                
+                // Small yield to keep UI responsive
+                await new Promise(resolve => setTimeout(resolve, 0));
             }
             
-            // OPTIMIZATION 3: Efficient chunk combination
-            // Pre-allocate combined array for better performance
-            const totalLength = processedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
-            const combined = new Float32Array(totalLength);
+            console.log(`Total processed samples: ${totalProcessed}`);
+            console.log(`Original samples: ${audioData.length}`);
+            
+            // FIX 3: Direct concatenation without any gaps
+            // Pre-allocate exact size
+            const combined = new Float32Array(totalProcessed);
             
             let offset = 0;
             for (const chunk of processedChunks) {
@@ -539,11 +526,16 @@ class AudioFilterPro {
                 offset += chunk.length;
             }
             
+            // Verify we didn't create gaps
+            console.log(`Combined array length: ${combined.length}`);
+            
             this.processedAudio = {
                 data: combined,
-                sampleRate: this.uploadedAudio.sampleRate,
-                duration: combined.length / this.uploadedAudio.sampleRate
+                sampleRate: sampleRate,
+                duration: combined.length / sampleRate
             };
+            
+            console.log(`Processed duration: ${this.processedAudio.duration.toFixed(2)}s`);
             
             this.drawWaveform();
             this.showMessage('Processing complete! Click Play to hear.');
@@ -554,6 +546,85 @@ class AudioFilterPro {
         } finally {
             this.isProcessing = false;
         }
+    }
+    
+    // FIX 4: Ensure applyFilter returns the EXACT same length array
+    async applyFilter(audioData, filter) {
+        // Send to backend
+        try {
+            const response = await fetch('/api/process_audio', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    audio_data: audioData,
+                    filter_type: filter.type,
+                    cutoff_freq: filter.freq || 1000,
+                    resonance: filter.q || 0.7,
+                    gain: filter.gain || 0
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // FIX: Verify length matches
+                if (data.processed_audio.length !== audioData.length) {
+                    console.warn(`Filter changed length: ${audioData.length} → ${data.processed_audio.length}`);
+                    // Pad or trim to maintain length
+                    if (data.processed_audio.length < audioData.length) {
+                        // Pad with zeros at the end
+                        const padded = new Array(audioData.length).fill(0);
+                        padded.splice(0, data.processed_audio.length, ...data.processed_audio);
+                        return padded;
+                    } else {
+                        // Trim to original length
+                        return data.processed_audio.slice(0, audioData.length);
+                    }
+                }
+                return data.processed_audio;
+            } else {
+                throw new Error(data.error || 'Filter failed');
+            }
+        } catch (error) {
+            console.error('Filter error:', error);
+            // Return original audio on error
+            return audioData;
+        }
+    }
+    
+    // FIX 5: Debug helper to visualize chunks
+    debugChunks() {
+        if (!this.processedAudio) return;
+        
+        const data = this.processedAudio.data;
+        const sampleRate = this.processedAudio.sampleRate;
+        
+        // Find silent regions
+        let silentRegions = [];
+        let inSilence = false;
+        let silenceStart = 0;
+        
+        for (let i = 0; i < data.length; i++) {
+            const isSilent = Math.abs(data[i]) < 0.001;
+            
+            if (isSilent && !inSilence) {
+                inSilence = true;
+                silenceStart = i;
+            } else if (!isSilent && inSilence) {
+                inSilence = false;
+                const duration = (i - silenceStart) / sampleRate;
+                if (duration > 0.1) { // Only report silences > 100ms
+                    silentRegions.push({
+                        start: silenceStart / sampleRate,
+                        end: i / sampleRate,
+                        duration: duration
+                    });
+                }
+            }
+        }
+        
+        console.log('Silent regions:', silentRegions);
+        return silentRegions;
     }
 
     // OPTIMIZATION 4: Add a progress bar for visual feedback
@@ -638,19 +709,6 @@ class AudioFilterPro {
         return new Worker(URL.createObjectURL(blob));
     }
     
-    async applyFilter(audioData, filter) {
-        // This would call your backend API
-        // For now, simulate filter response
-        return audioData.map((sample, i) => {
-            // Simple filter simulation for testing
-            if (filter.type === 'lowpass') {
-                const freq = filter.freq / 20000;
-                return sample * (1 - Math.min(1, i * freq / 1000));
-            }
-            return sample;
-        });
-    }
-    
     updateFilterResponse() {
         // Visualize filter frequency response
         const canvas = document.getElementById('filterResponse');
@@ -699,6 +757,32 @@ class AudioFilterPro {
         }
         
         ctx.stroke();
+    }
+
+    // Add to your class for debugging
+    drawChunkBoundaries() {
+        if (!this.ctx || !this.canvas || !this.processedAudio) return;
+        
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const data = this.processedAudio.data;
+        const sampleRate = this.processedAudio.sampleRate;
+        const chunkSize = 44100 * 2; // 2-second chunks
+        
+        // Draw chunk boundaries in red
+        this.ctx.strokeStyle = '#ff0000';
+        this.ctx.lineWidth = 1;
+        this.ctx.setLineDash([5, 3]);
+        
+        for (let start = 0; start < data.length; start += chunkSize) {
+            const x = (start / data.length) * w;
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, h);
+            this.ctx.stroke();
+        }
+        
+        this.ctx.setLineDash([]);
     }
     
     drawWaveform() {
@@ -801,6 +885,10 @@ class AudioFilterPro {
         
         // Draw time ruler
         this.drawRuler();
+        // Add debug visualization if in debug mode
+        if (window.debugMode) {
+            this.drawChunkBoundaries();
+        }
     }
     
     drawRuler() {
