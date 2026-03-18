@@ -1,4 +1,4 @@
-// Audio Filter - COMPLETE WORKING VERSION
+// Audio Filter - COMPLETE WORKING VERSION WITH ALL FIXES
 console.log('Audio Filter LOADING...');
 
 let uploadedAudio = null;
@@ -6,42 +6,121 @@ let processedAudio = null;
 let audioContext = null;
 let sourceNode = null;
 let currentFilter = 'lowpass';
+let isInitialized = false;
 
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM ready, setting up...');
+    setupUI();
+});
+
+function setupUI() {
+    console.log('Setting up UI...');
     
-    // Setup buttons
-    setupButton('uploadBtn', uploadAudio);
-    setupButton('processBtn', processAudio);
-    setupButton('playBtn', playAudio);
-    setupButton('stopBtn', stopAudio);
-    setupButton('resetBtn', resetApp);
+    // Get button elements
+    const uploadBtn = document.getElementById('uploadBtn');
+    const processBtn = document.getElementById('processBtn');
+    const playBtn = document.getElementById('playBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    
+    // Setup upload button - DIRECT event listener
+    if (uploadBtn) {
+        // Remove any existing listeners and add new one
+        uploadBtn.replaceWith(uploadBtn.cloneNode(true));
+        const newUploadBtn = document.getElementById('uploadBtn');
+        newUploadBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Upload button clicked directly');
+            triggerFileUpload();
+        });
+        console.log('Upload button setup OK');
+    }
+    
+    // Setup process button
+    if (processBtn) {
+        processBtn.replaceWith(processBtn.cloneNode(true));
+        const newProcessBtn = document.getElementById('processBtn');
+        newProcessBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            processAudio();
+        });
+        console.log('Process button setup OK');
+    }
+    
+    // Setup play button
+    if (playBtn) {
+        playBtn.replaceWith(playBtn.cloneNode(true));
+        const newPlayBtn = document.getElementById('playBtn');
+        newPlayBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            playAudio();
+        });
+        console.log('Play button setup OK');
+    }
+    
+    // Setup stop button
+    if (stopBtn) {
+        stopBtn.replaceWith(stopBtn.cloneNode(true));
+        const newStopBtn = document.getElementById('stopBtn');
+        newStopBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            stopAudio();
+        });
+        console.log('Stop button setup OK');
+    }
+    
+    // Setup reset button
+    if (resetBtn) {
+        resetBtn.replaceWith(resetBtn.cloneNode(true));
+        const newResetBtn = document.getElementById('resetBtn');
+        newResetBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            resetApp();
+        });
+        console.log('Reset button setup OK');
+    }
     
     // Setup filter buttons
     document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
+        btn.replaceWith(btn.cloneNode(true));
+    });
+    
+    // Re-attach filter button events
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
             document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
             this.classList.add('active');
             currentFilter = this.dataset.filter || 'lowpass';
             console.log('Filter set to:', currentFilter);
             showMessage('Filter: ' + currentFilter);
-            if (uploadedAudio) processAudio();
+            if (uploadedAudio) {
+                processAudio();
+            }
         });
     });
     
     // Setup cutoff slider
     const cutoffSlider = document.getElementById('cutoffFreq');
     if (cutoffSlider) {
-        cutoffSlider.addEventListener('input', function() {
+        cutoffSlider.replaceWith(cutoffSlider.cloneNode(true));
+        const newCutoffSlider = document.getElementById('cutoffFreq');
+        newCutoffSlider.addEventListener('input', function() {
             const valueEl = document.getElementById('cutoffValue');
             if (valueEl) valueEl.textContent = this.value + ' Hz';
-            if (uploadedAudio) processAudio();
+            // Don't auto-process on every slider move - wait for release
+        });
+        
+        newCutoffSlider.addEventListener('change', function() {
+            if (uploadedAudio) {
+                processAudio();
+            }
         });
         
         // Set initial value display
         const valueEl = document.getElementById('cutoffValue');
-        if (valueEl) valueEl.textContent = cutoffSlider.value + ' Hz';
+        if (valueEl) valueEl.textContent = newCutoffSlider.value + ' Hz';
     }
     
     // Setup canvas
@@ -52,46 +131,54 @@ document.addEventListener('DOMContentLoaded', function() {
         drawEmpty(canvas);
     }
     
-    showMessage('Ready - Upload audio to begin');
+    showMessage('Ready - Click Upload to begin');
     console.log('Setup complete');
-});
-
-function setupButton(id, handler) {
-    const btn = document.getElementById(id);
-    if (btn) {
-        btn.addEventListener('click', handler);
-        console.log('Button', id, 'setup OK');
-    } else {
-        console.log('Button', id, 'not found');
-    }
+    isInitialized = true;
 }
 
-function uploadAudio() {
-    console.log('Upload clicked');
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'audio/*';
-    input.onchange = handleFileSelect;
-    input.click();
-}
-
-async function handleFileSelect(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+// DIRECT file upload trigger - no intermediate functions
+function triggerFileUpload() {
+    console.log('Creating file input...');
     
-    console.log('File selected:', file.name, '(', (file.size / 1024 / 1024).toFixed(2), 'MB)');
+    // Create input element directly in the click handler
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'audio/*';
+    fileInput.style.display = 'none';
+    
+    // Set up change handler
+    fileInput.onchange = function(event) {
+        const file = event.target.files[0];
+        if (file) {
+            console.log('File selected:', file.name);
+            handleSelectedFile(file);
+        }
+    };
+    
+    // Add to body, trigger click, then remove
+    document.body.appendChild(fileInput);
+    fileInput.click();
+    
+    // Clean up after a delay
+    setTimeout(() => {
+        if (fileInput.parentNode) {
+            fileInput.parentNode.removeChild(fileInput);
+        }
+    }, 1000);
+}
+
+async function handleSelectedFile(file) {
+    console.log('Processing file:', file.name);
     showMessage('Loading audio...');
     
     try {
-        // Read file as ArrayBuffer
         const arrayBuffer = await file.arrayBuffer();
         
-        // Create audio context on first user interaction
+        // Create audio context on first file load
         if (!audioContext) {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
         
-        // Decode audio data
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         
         uploadedAudio = {
@@ -103,16 +190,15 @@ async function handleFileSelect(event) {
         };
         
         console.log('Audio loaded:', uploadedAudio.data.length, 'samples,', 
-                   uploadedAudio.duration.toFixed(2), 'seconds,',
-                   uploadedAudio.sampleRate, 'Hz');
+                   uploadedAudio.duration.toFixed(2), 'seconds');
         
-        // Visualize the uploaded audio
+        // Visualize
         drawWaveform(uploadedAudio.data, '#48bb78');
         
-        // Auto-process with current filter
+        // Auto-process after a short delay
         setTimeout(() => processAudio(), 100);
         
-        showMessage(`Loaded: ${uploadedAudio.duration.toFixed(2)}s - Click Process to filter`);
+        showMessage(`Loaded: ${uploadedAudio.duration.toFixed(2)}s - Processing...`);
         
     } catch (error) {
         console.error('Upload error:', error);
@@ -129,24 +215,17 @@ async function processAudio() {
     showMessage('Processing audio...');
     
     try {
-        // Get parameters from UI
         const cutoffSlider = document.getElementById('cutoffFreq');
         const cutoffValue = cutoffSlider ? parseFloat(cutoffSlider.value) : 1000;
         
         console.log(`Processing with filter: ${currentFilter}, cutoff: ${cutoffValue}Hz`);
         
-        // Create a fresh copy of audio data to avoid detached ArrayBuffer
+        // Limit processing to 30 seconds max for performance
+        const maxSamples = 44100 * 30;
         const originalData = uploadedAudio.data;
-        const maxProcessingSamples = 44100 * 30; // Process max 30 seconds for performance
+        const samplesToProcess = Math.min(originalData.length, maxSamples);
         
-        // Determine how many samples to process
-        let samplesToProcess = originalData.length;
-        if (samplesToProcess > maxProcessingSamples) {
-            samplesToProcess = maxProcessingSamples;
-            console.log(`Limiting processing to first ${maxProcessingSamples} samples (${(maxProcessingSamples/44100).toFixed(1)}s)`);
-        }
-        
-        // Copy data to regular array (prevents detached ArrayBuffer issues)
+        // Create copy of data
         const audioArray = new Array(samplesToProcess);
         for (let i = 0; i < samplesToProcess; i++) {
             audioArray[i] = originalData[i];
@@ -154,7 +233,6 @@ async function processAudio() {
         
         console.log(`Sending ${audioArray.length} samples to server...`);
         
-        // Prepare request data
         const requestData = {
             audio_data: audioArray,
             filter_type: currentFilter,
@@ -164,7 +242,6 @@ async function processAudio() {
             process_type: 'uploaded'
         };
         
-        // Send to server
         const response = await fetch('/api/process_audio', {
             method: 'POST',
             headers: { 
@@ -174,38 +251,25 @@ async function processAudio() {
             body: JSON.stringify(requestData)
         });
         
-        // Check response status
         if (!response.ok) {
-            let errorMsg = `Server error: ${response.status}`;
-            try {
-                const errorData = await response.json();
-                errorMsg += ` - ${errorData.error || 'Unknown error'}`;
-            } catch (e) {
-                // Could not parse JSON error response
-            }
-            throw new Error(errorMsg);
+            throw new Error(`Server error: ${response.status}`);
         }
         
-        // Parse response
         const data = await response.json();
         
         if (data.success) {
-            // Store processed audio
             processedAudio = {
                 data: data.processed_audio,
                 sampleRate: uploadedAudio.sampleRate,
                 duration: data.processed_audio.length / uploadedAudio.sampleRate
             };
             
-            console.log(`Processing complete: ${data.processed_length} samples, ${(data.processing_time || 0).toFixed(2)}s`);
-            
-            // Visualize processed audio
+            console.log(`Processing complete: ${data.processed_length} samples`);
             drawWaveform(data.processed_audio, '#667eea');
-            
-            showMessage(`Processed! ${processedAudio.duration.toFixed(2)}s - Click Play to hear`);
+            showMessage(`Processed! Click Play to hear`);
             
         } else {
-            throw new Error(data.error || 'Processing failed on server');
+            throw new Error(data.error || 'Processing failed');
         }
         
     } catch (error) {
@@ -215,73 +279,62 @@ async function processAudio() {
 }
 
 async function playAudio() {
-    // Determine which audio to play (processed first, then original)
     const audioToPlay = processedAudio || uploadedAudio;
     
     if (!audioToPlay) {
-        showMessage('No audio to play. Please upload audio first.', true);
+        showMessage('Please upload audio first', true);
         return;
     }
     
-    console.log('Playing:', processedAudio ? 'processed' : 'original', 'audio');
-    
-    // Ensure audio context exists and is resumed
-    if (!audioContext) {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    
-    if (audioContext.state === 'suspended') {
-        await audioContext.resume();
-    }
-    
-    // Stop any currently playing audio
-    stopAudio();
+    console.log('Playing:', processedAudio ? 'processed' : 'original');
     
     try {
-        let audioBuffer;
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
         
+        if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+        }
+        
+        stopAudio();
+        
+        let audioBuffer;
         if (audioToPlay.buffer) {
-            // Use existing AudioBuffer
             audioBuffer = audioToPlay.buffer;
         } else {
-            // Create new AudioBuffer from array data
             audioBuffer = audioContext.createBuffer(
-                1, // mono
-                audioToPlay.data.length,
+                1, 
+                audioToPlay.data.length, 
                 audioToPlay.sampleRate
             );
             
             const channelData = audioBuffer.getChannelData(0);
             
-            // Copy and normalize data to prevent clipping
-            let maxAmplitude = 0.001;
+            // Normalize
+            let maxAmp = 0.001;
             for (const sample of audioToPlay.data) {
-                const absSample = Math.abs(sample);
-                if (absSample > maxAmplitude) maxAmplitude = absSample;
+                const abs = Math.abs(sample);
+                if (abs > maxAmp) maxAmp = abs;
             }
             
-            const normalizeFactor = 0.8 / maxAmplitude; // 0.8 for headroom
-            
+            const scale = 0.8 / maxAmp;
             for (let i = 0; i < audioToPlay.data.length; i++) {
-                channelData[i] = audioToPlay.data[i] * normalizeFactor;
+                channelData[i] = audioToPlay.data[i] * scale;
             }
         }
         
-        // Create and play audio source
         sourceNode = audioContext.createBufferSource();
         sourceNode.buffer = audioBuffer;
         sourceNode.connect(audioContext.destination);
         
-        // Set up playback completion handler
         sourceNode.onended = () => {
             sourceNode = null;
             showMessage('Playback finished');
         };
         
-        // Start playback
         sourceNode.start();
-        
-        showMessage(`Playing ${processedAudio ? 'processed' : 'original'} audio...`);
+        showMessage('Playing...');
         
     } catch (error) {
         console.error('Play error:', error);
@@ -294,22 +347,18 @@ function stopAudio() {
         try {
             sourceNode.stop();
             sourceNode.disconnect();
-        } catch (e) {
-            // Source might already be stopped, ignore error
-        }
+        } catch (e) {}
         sourceNode = null;
     }
 }
 
 function resetApp() {
-    // Stop any playing audio
     stopAudio();
     
-    // Clear audio data
     uploadedAudio = null;
     processedAudio = null;
     
-    // Reset filter UI
+    // Reset filter
     currentFilter = 'lowpass';
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.classList.remove('active');
@@ -318,7 +367,7 @@ function resetApp() {
         }
     });
     
-    // Reset cutoff slider
+    // Reset cutoff
     const cutoffSlider = document.getElementById('cutoffFreq');
     if (cutoffSlider) {
         cutoffSlider.value = 1000;
@@ -326,11 +375,11 @@ function resetApp() {
         if (valueEl) valueEl.textContent = '1000 Hz';
     }
     
-    // Clear visualization
+    // Clear canvas
     const canvas = document.getElementById('waveVisualizer');
     if (canvas) drawEmpty(canvas);
     
-    showMessage('Reset complete - Ready for new audio');
+    showMessage('Reset complete');
 }
 
 function drawEmpty(canvas) {
@@ -338,43 +387,28 @@ function drawEmpty(canvas) {
     const width = canvas.width = canvas.offsetWidth;
     const height = canvas.height = canvas.offsetHeight;
     
-    // Clear with dark background
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, width, height);
     
-    // Draw subtle grid
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-    ctx.lineWidth = 1;
-    
-    // Horizontal center line
-    ctx.beginPath();
-    ctx.moveTo(0, height / 2);
-    ctx.lineTo(width, height / 2);
-    ctx.stroke();
-    
-    // Draw instruction text
     ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
     ctx.font = '14px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Upload audio to begin', width / 2, height / 2);
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('Click Upload to begin', width / 2, height / 2);
 }
 
 function drawWaveform(data, color) {
     const canvas = document.getElementById('waveVisualizer');
-    if (!canvas || !data || data.length === 0) return;
+    if (!canvas || !data) return;
     
     const ctx = canvas.getContext('2d');
     const width = canvas.width = canvas.offsetWidth;
     const height = canvas.height = canvas.offsetHeight;
     
-    // Clear canvas
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, width, height);
     
-    // Draw center line
+    // Center line
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -382,70 +416,58 @@ function drawWaveform(data, color) {
     ctx.lineTo(width, height / 2);
     ctx.stroke();
     
-    // Draw waveform
+    // Waveform
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.beginPath();
     
-    // Optimize: Don't draw every sample for long audio
     const skip = Math.max(1, Math.floor(data.length / width));
     
     for (let i = 0; i < data.length; i += skip) {
         const x = (i / data.length) * width;
         const y = (1 - (data[i] + 1) / 2) * height;
         
-        if (i === 0) {
-            ctx.moveTo(x, y);
-        } else {
-            ctx.lineTo(x, y);
-        }
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
     }
     
     ctx.stroke();
     
-    // Draw info text
+    // Info text
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
     ctx.font = '12px sans-serif';
+    ctx.textAlign = 'left';
     
-    if (color === '#48bb78') {
-        // Original audio info
+    if (color === '#48bb78' && uploadedAudio) {
         ctx.fillText(`Original: ${uploadedAudio.duration.toFixed(2)}s`, 10, 20);
-        ctx.fillText(`${uploadedAudio.sampleRate}Hz`, 10, 40);
-    } else {
-        // Processed audio info
+    } else if (color === '#667eea' && processedAudio) {
         ctx.fillText(`Processed: ${currentFilter}`, 10, 20);
-        const cutoffSlider = document.getElementById('cutoffFreq');
-        if (cutoffSlider) {
-            ctx.fillText(`Cutoff: ${cutoffSlider.value}Hz`, 10, 40);
-        }
+        const cutoff = document.getElementById('cutoffFreq');
+        if (cutoff) ctx.fillText(`Cutoff: ${cutoff.value}Hz`, 10, 40);
     }
 }
 
 function showMessage(text, isError = false) {
     console.log(isError ? 'ERROR:' : 'INFO:', text);
     
-    // Update status element
     const statusEl = document.getElementById('status');
     if (statusEl) {
         statusEl.textContent = text;
         statusEl.style.color = isError ? '#f56565' : '#48bb78';
-        statusEl.style.fontWeight = isError ? 'bold' : 'normal';
     }
     
-    // Also show temporary notification
+    // Show notification
     showNotification(text, isError);
 }
 
 function showNotification(text, isError = false) {
-    // Remove any existing notification
-    const oldNotification = document.getElementById('temp-notification');
-    if (oldNotification) oldNotification.remove();
+    const old = document.getElementById('temp-notification');
+    if (old) old.remove();
     
-    // Create new notification
-    const notification = document.createElement('div');
-    notification.id = 'temp-notification';
-    notification.textContent = text;
-    notification.style.cssText = `
+    const notif = document.createElement('div');
+    notif.id = 'temp-notification';
+    notif.textContent = text;
+    notif.style.cssText = `
         position: fixed;
         top: 20px;
         right: 20px;
@@ -457,57 +479,37 @@ function showNotification(text, isError = false) {
         font-size: 14px;
         z-index: 10000;
         box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        max-width: 300px;
     `;
     
-    document.body.appendChild(notification);
+    document.body.appendChild(notif);
     
-    // Auto-remove after 3 seconds
     setTimeout(() => {
-        if (notification.parentNode) {
-            notification.parentNode.removeChild(notification);
-        }
+        if (notif.parentNode) notif.remove();
     }, 3000);
 }
 
 function showDetailedError(error, context) {
     console.error(`Error in ${context}:`, error);
     
-    let userMessage = error.message || 'An unknown error occurred';
+    let message = error.message || 'Unknown error';
     
-    // Provide user-friendly error messages
-    if (userMessage.includes('detached ArrayBuffer')) {
-        userMessage = 'Audio processing error. Please try uploading the file again.';
-    } else if (userMessage.includes('NetworkError') || userMessage.includes('Failed to fetch')) {
-        userMessage = 'Network error. Please check your connection and try again.';
-    } else if (userMessage.includes('404')) {
-        userMessage = 'Server not responding. Please try again later.';
-    } else if (userMessage.includes('500')) {
-        userMessage = 'Server error. Please try again or use a different audio file.';
+    if (message.includes('detached ArrayBuffer')) {
+        message = 'Audio processing error. Please try uploading again.';
+    } else if (message.includes('NetworkError') || message.includes('fetch')) {
+        message = 'Network error. Check connection and try again.';
+    } else if (message.includes('404')) {
+        message = 'Server not responding. Please try again.';
     }
     
-    showMessage(`${context} failed: ${userMessage}`, true);
+    showMessage(`${context} failed: ${message}`, true);
 }
 
-// Add global access for debugging
-window.audioApp = {
-    getState: () => ({
+// Expose for debugging
+window.debug = {
+    upload: triggerFileUpload,
+    status: () => ({
         uploaded: !!uploadedAudio,
         processed: !!processedAudio,
-        filter: currentFilter,
-        context: audioContext ? audioContext.state : 'none'
-    }),
-    testAPI: async () => {
-        try {
-            const response = await fetch('/api/health');
-            const data = await response.json();
-            console.log('API Test:', data);
-            showMessage(`API OK: ${data.status} (v${data.version})`);
-            return data;
-        } catch (error) {
-            console.error('API Test failed:', error);
-            showMessage('API Test failed: ' + error.message, true);
-            return null;
-        }
-    }
+        filter: currentFilter
+    })
 };
