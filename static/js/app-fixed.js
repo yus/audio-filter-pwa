@@ -1,4 +1,4 @@
-// Audio Filter - COMPLETE WORKING VERSION WITH ALL FIXES
+// Audio Filter - COMPLETE WORKING VERSION (Firefox Compatible)
 console.log('Audio Filter LOADING...');
 
 let uploadedAudio = null;
@@ -6,7 +6,9 @@ let processedAudio = null;
 let audioContext = null;
 let sourceNode = null;
 let currentFilter = 'lowpass';
-let isInitialized = false;
+let isFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
+
+console.log('Browser:', isFirefox ? 'Firefox' : 'Other');
 
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', function() {
@@ -24,23 +26,70 @@ function setupUI() {
     const stopBtn = document.getElementById('stopBtn');
     const resetBtn = document.getElementById('resetBtn');
     
-    // Setup upload button - DIRECT event listener
+    // Setup upload button - Firefox needs special handling
     if (uploadBtn) {
-        // Remove any existing listeners and add new one
-        uploadBtn.replaceWith(uploadBtn.cloneNode(true));
-        const newUploadBtn = document.getElementById('uploadBtn');
+        // Remove any existing listeners
+        const newUploadBtn = uploadBtn.cloneNode(true);
+        uploadBtn.parentNode.replaceChild(newUploadBtn, uploadBtn);
+        
         newUploadBtn.addEventListener('click', function(e) {
             e.preventDefault();
-            console.log('Upload button clicked directly');
-            triggerFileUpload();
+            e.stopPropagation();
+            console.log('Upload clicked - Firefox:', isFirefox);
+            
+            // Firefox needs the input to be created AND clicked in the same event cycle
+            if (isFirefox) {
+                // Firefox fix: create input and click immediately
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'audio/*';
+                input.style.position = 'fixed';
+                input.style.top = '-100px';
+                input.style.left = '-100px';
+                
+                input.onchange = function(event) {
+                    const file = event.target.files[0];
+                    if (file) {
+                        console.log('File selected in Firefox:', file.name);
+                        handleSelectedFile(file);
+                    }
+                    // Clean up
+                    setTimeout(() => {
+                        if (input.parentNode) input.remove();
+                    }, 100);
+                };
+                
+                document.body.appendChild(input);
+                // Use setTimeout to ensure DOM is ready
+                setTimeout(() => {
+                    input.click();
+                }, 10);
+            } else {
+                // Chrome/Edge/Safari - simpler approach
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'audio/*';
+                input.style.display = 'none';
+                
+                input.onchange = function(event) {
+                    const file = event.target.files[0];
+                    if (file) {
+                        handleSelectedFile(file);
+                    }
+                    if (input.parentNode) input.remove();
+                };
+                
+                document.body.appendChild(input);
+                input.click();
+            }
         });
-        console.log('Upload button setup OK');
+        console.log('Upload button setup OK (Firefox compatible)');
     }
     
     // Setup process button
     if (processBtn) {
-        processBtn.replaceWith(processBtn.cloneNode(true));
-        const newProcessBtn = document.getElementById('processBtn');
+        const newProcessBtn = processBtn.cloneNode(true);
+        processBtn.parentNode.replaceChild(newProcessBtn, processBtn);
         newProcessBtn.addEventListener('click', function(e) {
             e.preventDefault();
             processAudio();
@@ -50,8 +99,8 @@ function setupUI() {
     
     // Setup play button
     if (playBtn) {
-        playBtn.replaceWith(playBtn.cloneNode(true));
-        const newPlayBtn = document.getElementById('playBtn');
+        const newPlayBtn = playBtn.cloneNode(true);
+        playBtn.parentNode.replaceChild(newPlayBtn, playBtn);
         newPlayBtn.addEventListener('click', function(e) {
             e.preventDefault();
             playAudio();
@@ -61,8 +110,8 @@ function setupUI() {
     
     // Setup stop button
     if (stopBtn) {
-        stopBtn.replaceWith(stopBtn.cloneNode(true));
-        const newStopBtn = document.getElementById('stopBtn');
+        const newStopBtn = stopBtn.cloneNode(true);
+        stopBtn.parentNode.replaceChild(newStopBtn, stopBtn);
         newStopBtn.addEventListener('click', function(e) {
             e.preventDefault();
             stopAudio();
@@ -72,8 +121,8 @@ function setupUI() {
     
     // Setup reset button
     if (resetBtn) {
-        resetBtn.replaceWith(resetBtn.cloneNode(true));
-        const newResetBtn = document.getElementById('resetBtn');
+        const newResetBtn = resetBtn.cloneNode(true);
+        resetBtn.parentNode.replaceChild(newResetBtn, resetBtn);
         newResetBtn.addEventListener('click', function(e) {
             e.preventDefault();
             resetApp();
@@ -82,11 +131,44 @@ function setupUI() {
     }
     
     // Setup filter buttons
+    setupFilterButtons();
+    
+    // Setup cutoff slider
+    setupCutoffSlider();
+    
+    // Setup canvas
+    const canvas = document.getElementById('waveVisualizer');
+    if (canvas) {
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        drawEmpty(canvas);
+        
+        // Handle resize
+        window.addEventListener('resize', function() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            if (uploadedAudio) {
+                if (processedAudio) {
+                    drawWaveform(processedAudio.data, '#667eea');
+                } else {
+                    drawWaveform(uploadedAudio.data, '#48bb78');
+                }
+            } else {
+                drawEmpty(canvas);
+            }
+        });
+    }
+    
+    showMessage('Ready - Click Upload to begin');
+    console.log('Setup complete');
+}
+
+function setupFilterButtons() {
     document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.replaceWith(btn.cloneNode(true));
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
     });
     
-    // Re-attach filter button events
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.addEventListener('click', function(e) {
             e.preventDefault();
@@ -100,81 +182,38 @@ function setupUI() {
             }
         });
     });
-    
-    // Setup cutoff slider
-    const cutoffSlider = document.getElementById('cutoffFreq');
-    if (cutoffSlider) {
-        cutoffSlider.replaceWith(cutoffSlider.cloneNode(true));
-        const newCutoffSlider = document.getElementById('cutoffFreq');
-        newCutoffSlider.addEventListener('input', function() {
-            const valueEl = document.getElementById('cutoffValue');
-            if (valueEl) valueEl.textContent = this.value + ' Hz';
-            // Don't auto-process on every slider move - wait for release
-        });
-        
-        newCutoffSlider.addEventListener('change', function() {
-            if (uploadedAudio) {
-                processAudio();
-            }
-        });
-        
-        // Set initial value display
-        const valueEl = document.getElementById('cutoffValue');
-        if (valueEl) valueEl.textContent = newCutoffSlider.value + ' Hz';
-    }
-    
-    // Setup canvas
-    const canvas = document.getElementById('waveVisualizer');
-    if (canvas) {
-        canvas.width = canvas.offsetWidth;
-        canvas.height = canvas.offsetHeight;
-        drawEmpty(canvas);
-    }
-    
-    showMessage('Ready - Click Upload to begin');
-    console.log('Setup complete');
-    isInitialized = true;
 }
 
-// DIRECT file upload trigger - no intermediate functions
-function triggerFileUpload() {
-    console.log('Creating file input...');
+function setupCutoffSlider() {
+    const cutoffSlider = document.getElementById('cutoffFreq');
+    if (!cutoffSlider) return;
     
-    // Create input element directly in the click handler
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = 'audio/*';
-    fileInput.style.display = 'none';
+    const newSlider = cutoffSlider.cloneNode(true);
+    cutoffSlider.parentNode.replaceChild(newSlider, cutoffSlider);
     
-    // Set up change handler
-    fileInput.onchange = function(event) {
-        const file = event.target.files[0];
-        if (file) {
-            console.log('File selected:', file.name);
-            handleSelectedFile(file);
+    newSlider.addEventListener('input', function() {
+        const valueEl = document.getElementById('cutoffValue');
+        if (valueEl) valueEl.textContent = this.value + ' Hz';
+    });
+    
+    newSlider.addEventListener('change', function() {
+        if (uploadedAudio) {
+            processAudio();
         }
-    };
+    });
     
-    // Add to body, trigger click, then remove
-    document.body.appendChild(fileInput);
-    fileInput.click();
-    
-    // Clean up after a delay
-    setTimeout(() => {
-        if (fileInput.parentNode) {
-            fileInput.parentNode.removeChild(fileInput);
-        }
-    }, 1000);
+    // Set initial value display
+    const valueEl = document.getElementById('cutoffValue');
+    if (valueEl) valueEl.textContent = newSlider.value + ' Hz';
 }
 
 async function handleSelectedFile(file) {
-    console.log('Processing file:', file.name);
+    console.log('Processing file:', file.name, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
     showMessage('Loading audio...');
     
     try {
         const arrayBuffer = await file.arrayBuffer();
         
-        // Create audio context on first file load
         if (!audioContext) {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
@@ -189,16 +228,17 @@ async function handleSelectedFile(file) {
             fileName: file.name
         };
         
-        console.log('Audio loaded:', uploadedAudio.data.length, 'samples,', 
-                   uploadedAudio.duration.toFixed(2), 'seconds');
+        console.log('Audio loaded:', {
+            samples: uploadedAudio.data.length,
+            duration: uploadedAudio.duration.toFixed(2) + 's',
+            sampleRate: uploadedAudio.sampleRate + 'Hz'
+        });
         
-        // Visualize
         drawWaveform(uploadedAudio.data, '#48bb78');
-        
-        // Auto-process after a short delay
-        setTimeout(() => processAudio(), 100);
-        
         showMessage(`Loaded: ${uploadedAudio.duration.toFixed(2)}s - Processing...`);
+        
+        // Auto-process after load
+        setTimeout(() => processAudio(), 100);
         
     } catch (error) {
         console.error('Upload error:', error);
@@ -218,9 +258,9 @@ async function processAudio() {
         const cutoffSlider = document.getElementById('cutoffFreq');
         const cutoffValue = cutoffSlider ? parseFloat(cutoffSlider.value) : 1000;
         
-        console.log(`Processing with filter: ${currentFilter}, cutoff: ${cutoffValue}Hz`);
+        console.log(`Processing: filter=${currentFilter}, cutoff=${cutoffValue}Hz`);
         
-        // Limit processing to 30 seconds max for performance
+        // Limit to 30 seconds for performance
         const maxSamples = 44100 * 30;
         const originalData = uploadedAudio.data;
         const samplesToProcess = Math.min(originalData.length, maxSamples);
@@ -252,7 +292,8 @@ async function processAudio() {
         });
         
         if (!response.ok) {
-            throw new Error(`Server error: ${response.status}`);
+            const errorText = await response.text();
+            throw new Error(`Server ${response.status}: ${errorText.substring(0, 100)}`);
         }
         
         const data = await response.json();
@@ -311,7 +352,7 @@ async function playAudio() {
             
             const channelData = audioBuffer.getChannelData(0);
             
-            // Normalize
+            // Normalize to prevent clipping
             let maxAmp = 0.001;
             for (const sample of audioToPlay.data) {
                 const abs = Math.abs(sample);
@@ -416,7 +457,7 @@ function drawWaveform(data, color) {
     ctx.lineTo(width, height / 2);
     ctx.stroke();
     
-    // Waveform
+    // Draw waveform
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -456,7 +497,6 @@ function showMessage(text, isError = false) {
         statusEl.style.color = isError ? '#f56565' : '#48bb78';
     }
     
-    // Show notification
     showNotification(text, isError);
 }
 
@@ -504,12 +544,16 @@ function showDetailedError(error, context) {
     showMessage(`${context} failed: ${message}`, true);
 }
 
-// Expose for debugging
+// Debug helper
 window.debug = {
-    upload: triggerFileUpload,
+    upload: () => {
+        const btn = document.getElementById('uploadBtn');
+        if (btn) btn.click();
+    },
     status: () => ({
         uploaded: !!uploadedAudio,
         processed: !!processedAudio,
-        filter: currentFilter
+        filter: currentFilter,
+        firefox: isFirefox
     })
 };
