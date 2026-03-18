@@ -771,3 +771,17 @@ canvas {
     50% { opacity: 0.5; }
     100% { opacity: 1; }
 }
+/* Add to your styles.css */
+button {
+    cursor: pointer;
+    user-select: none;
+    -moz-user-select: none;
+}
+
+/* Firefox-specific fix */
+@-moz-document url-prefix() {
+    #uploadBtn {
+        background: #48bb78 !important;
+        border: 2px solid #2f855a !important;
+    }
+}
