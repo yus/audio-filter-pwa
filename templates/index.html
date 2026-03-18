@@ -148,10 +148,23 @@
         <div class="panel">
             <h3>FILTER</h3>
             <div class="btn-group">
-                <button class="filter-btn active" data-filter="lowpass">Low Pass</button>
-                <button class="filter-btn" data-filter="highpass">High Pass</button>
-                <button class="filter-btn" data-filter="bandpass">Band Pass</button>
-                <button class="filter-btn" data-filter="none">Off</button>
+                <!-- Toolbar -->
+                <div class="toolbar">
+                    <button id="undoBtn" data-tooltip="Undo (Ctrl+Z)">↩ Undo</button>
+                    <button id="redoBtn" data-tooltip="Redo (Ctrl+Y)">↪ Redo</button>
+                    <button id="zoomInBtn" data-tooltip="Zoom In (+)">🔍+</button>
+                    <button id="zoomOutBtn" data-tooltip="Zoom Out (-)">🔍-</button>
+                    <button id="fitViewBtn" data-tooltip="Fit View (0)">⊞ Fit</button>
+                </div>
+                
+                <!-- Filter Tabs -->
+                <div id="filterTabs" class="filter-tabs"></div>
+                
+                <!-- Filter Controls -->
+                <div id="filterControls"></div>
+                
+                <!-- Filter Response -->
+                <canvas id="filterResponse" class="filter-response" width="800" height="80"></canvas>
             </div>
             
             <div class="slider-group">
@@ -162,20 +175,37 @@
         
         <div class="panel">
             <div class="visualizer">
-                <canvas id="waveVisualizer"></canvas>
+                <!-- Waveform -->
+                <canvas id="waveVisualizer" width="800" height="200"></canvas>
             </div>
-            <div id="status" style="margin: 5px; padding: 5px; border-radius: 4px; background: #2a2a2a; min-height: 40px;"></div>
+            <div id="status" class="status-bar" style="margin: 5px; padding: 5px; border-radius: 4px; background: #2a2a2a; min-height: 40px;"></div>
         </div>
         
         <div class="panel">
             <div class="btn-group">
-                <button id="uploadBtn">Upload Audio</button>
-                <button id="processBtn">Process</button>
-            </div>
-            <div class="btn-group">
-                <button id="playBtn">Play</button>
-                <button id="stopBtn">Stop</button>
-                <button id="resetBtn">Reset</button>
+                <!-- Iconified Bottom Toolbar -->
+                <div class="bottom-toolbar">
+                    <button id="uploadBtn" data-tooltip="Upload Audio">
+                        <span class="icon">📤</span>
+                        <span>Upload</span>
+                    </button>
+                    <button id="processBtn" data-tooltip="Process with Filters">
+                        <span class="icon">⚙️</span>
+                        <span>Process</span>
+                    </button>
+                    <button id="playBtn" data-tooltip="Play (Space)">
+                        <span class="icon">▶️</span>
+                        <span>Play</span>
+                    </button>
+                    <button id="stopBtn" data-tooltip="Stop">
+                        <span class="icon">⏹️</span>
+                        <span>Stop</span>
+                    </button>
+                    <button id="resetBtn" data-tooltip="Reset All">
+                        <span class="icon">🔄</span>
+                        <span>Reset</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
