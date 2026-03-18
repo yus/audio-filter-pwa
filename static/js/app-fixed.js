@@ -1,4 +1,4 @@
-// Audio Filter - COMPLETE WORKING VERSION (Using userActivation API)
+// Audio Filter - COMPLETE WORKING VERSION (With Size Management)
 console.log('Audio Filter LOADING...');
 
 let uploadedAudio = null;
@@ -6,6 +6,11 @@ let processedAudio = null;
 let audioContext = null;
 let sourceNode = null;
 let currentFilter = 'lowpass';
+let isProcessing = false;
+
+// Constants
+const MAX_DURATION = 30; // Maximum 30 seconds
+const MAX_SAMPLES = 44100 * MAX_DURATION; // ~1.3M samples
 
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', function() {
@@ -23,48 +28,14 @@ function setupUI() {
     const stopBtn = document.getElementById('stopBtn');
     const resetBtn = document.getElementById('resetBtn');
     
-    // Setup upload button with proper user activation handling
+    // Setup upload button
     if (uploadBtn) {
         const newUploadBtn = uploadBtn.cloneNode(true);
         uploadBtn.parentNode.replaceChild(newUploadBtn, uploadBtn);
         
         newUploadBtn.addEventListener('click', function(e) {
             e.preventDefault();
-            
-            // Check if we have user activation
-            if (navigator.userActivation && !navigator.userActivation.isActive) {
-                console.log('Waiting for user activation...');
-                // Still allow the file picker - it will trigger activation
-            }
-            
-            console.log('Upload clicked - has user activation:', 
-                       navigator.userActivation?.isActive);
-            
-            // Create file input directly in click handler
-            const fileInput = document.createElement('input');
-            fileInput.type = 'file';
-            fileInput.accept = 'audio/*';
-            fileInput.style.position = 'fixed';
-            fileInput.style.top = '0';
-            fileInput.style.left = '0';
-            fileInput.style.opacity = '0';
-            fileInput.style.pointerEvents = 'none';
-            
-            fileInput.onchange = function(event) {
-                const file = event.target.files[0];
-                if (file) {
-                    handleSelectedFile(file);
-                }
-                // Clean up
-                setTimeout(() => {
-                    if (fileInput.parentNode) {
-                        fileInput.parentNode.removeChild(fileInput);
-                    }
-                }, 100);
-            };
-            
-            document.body.appendChild(fileInput);
-            fileInput.click();
+            triggerFileUpload();
         });
         console.log('Upload button setup OK');
     }
@@ -123,16 +94,33 @@ function setupUI() {
         drawEmpty(canvas);
     }
     
-    showMessage('Ready - Click Upload to begin');
+    showMessage(`Ready - Click Upload (max ${MAX_DURATION}s)`);
     console.log('Setup complete');
+}
+
+function triggerFileUpload() {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'audio/*';
+    fileInput.style.position = 'fixed';
+    fileInput.style.top = '-100px';
+    fileInput.style.left = '-100px';
     
-    // Log user activation status
-    if (navigator.userActivation) {
-        console.log('User activation API supported');
-        console.log('Has ever been active:', navigator.userActivation.hasBeenActive);
-    } else {
-        console.log('User activation API not supported (older browser)');
-    }
+    fileInput.onchange = function(event) {
+        const file = event.target.files[0];
+        if (file) {
+            handleSelectedFile(file);
+        }
+        // Clean up
+        setTimeout(() => {
+            if (fileInput.parentNode) {
+                fileInput.parentNode.removeChild(fileInput);
+            }
+        }, 100);
+    };
+    
+    document.body.appendChild(fileInput);
+    fileInput.click();
 }
 
 function setupFilterButtons() {
@@ -149,7 +137,7 @@ function setupFilterButtons() {
             currentFilter = this.dataset.filter || 'lowpass';
             console.log('Filter set to:', currentFilter);
             showMessage('Filter: ' + currentFilter);
-            if (uploadedAudio) {
+            if (uploadedAudio && !isProcessing) {
                 processAudio();
             }
         });
@@ -169,7 +157,7 @@ function setupCutoffSlider() {
     });
     
     newSlider.addEventListener('change', function() {
-        if (uploadedAudio) {
+        if (uploadedAudio && !isProcessing) {
             processAudio();
         }
     });
@@ -192,22 +180,59 @@ async function handleSelectedFile(file) {
         
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         
-        uploadedAudio = {
-            buffer: audioBuffer,
-            data: audioBuffer.getChannelData(0),
-            sampleRate: audioBuffer.sampleRate,
-            duration: audioBuffer.duration,
-            fileName: file.name
-        };
+        // Get audio data
+        const fullData = audioBuffer.getChannelData(0);
+        const duration = fullData.length / audioBuffer.sampleRate;
         
-        console.log('Audio loaded:', {
+        console.log(`Full audio: ${duration.toFixed(2)}s, ${fullData.length} samples`);
+        
+        // Check if audio is too long
+        if (duration > MAX_DURATION) {
+            showMessage(`Audio too long (${duration.toFixed(2)}s). Truncating to ${MAX_DURATION}s.`, true);
+            
+            // Truncate to max duration
+            const samplesToKeep = Math.min(fullData.length, MAX_SAMPLES);
+            const truncatedData = new Float32Array(samplesToKeep);
+            for (let i = 0; i < samplesToKeep; i++) {
+                truncatedData[i] = fullData[i];
+            }
+            
+            uploadedAudio = {
+                buffer: audioBuffer,
+                data: truncatedData,
+                fullData: fullData,
+                sampleRate: audioBuffer.sampleRate,
+                duration: samplesToKeep / audioBuffer.sampleRate,
+                fileName: file.name,
+                isTruncated: true
+            };
+        } else {
+            uploadedAudio = {
+                buffer: audioBuffer,
+                data: fullData,
+                sampleRate: audioBuffer.sampleRate,
+                duration: duration,
+                fileName: file.name,
+                isTruncated: false
+            };
+        }
+        
+        console.log('Stored audio:', {
             samples: uploadedAudio.data.length,
             duration: uploadedAudio.duration.toFixed(2) + 's',
-            sampleRate: uploadedAudio.sampleRate + 'Hz'
+            sampleRate: uploadedAudio.sampleRate + 'Hz',
+            truncated: uploadedAudio.isTruncated
         });
         
+        // Draw waveform
         drawWaveform(uploadedAudio.data, '#48bb78');
-        showMessage(`Loaded: ${uploadedAudio.duration.toFixed(2)}s - Processing...`);
+        
+        // Add duration warning if truncated
+        if (uploadedAudio.isTruncated) {
+            showMessage(`Loaded first ${MAX_DURATION}s of ${duration.toFixed(2)}s file`, true);
+        } else {
+            showMessage(`Loaded: ${uploadedAudio.duration.toFixed(2)}s - Processing...`);
+        }
         
         // Auto-process after load
         setTimeout(() => processAudio(), 100);
@@ -224,6 +249,13 @@ async function processAudio() {
         return;
     }
     
+    // Prevent multiple simultaneous processing
+    if (isProcessing) {
+        console.log('Already processing, skipping...');
+        return;
+    }
+    
+    isProcessing = true;
     showMessage('Processing audio...');
     
     try {
@@ -232,15 +264,13 @@ async function processAudio() {
         
         console.log(`Processing: filter=${currentFilter}, cutoff=${cutoffValue}Hz`);
         
-        // Limit to 30 seconds for performance
-        const maxSamples = 44100 * 30;
-        const originalData = uploadedAudio.data;
-        const samplesToProcess = Math.min(originalData.length, maxSamples);
+        // Use the stored data (already truncated if needed)
+        const audioData = uploadedAudio.data;
         
-        // Create copy of data
-        const audioArray = new Array(samplesToProcess);
-        for (let i = 0; i < samplesToProcess; i++) {
-            audioArray[i] = originalData[i];
+        // Create a fresh copy for sending
+        const audioArray = new Array(audioData.length);
+        for (let i = 0; i < audioData.length; i++) {
+            audioArray[i] = audioData[i];
         }
         
         console.log(`Sending ${audioArray.length} samples to server...`);
@@ -264,8 +294,11 @@ async function processAudio() {
         });
         
         if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Server ${response.status}: ${errorText.substring(0, 100)}`);
+            if (response.status === 413) {
+                throw new Error(`File too large. Max ${MAX_DURATION}s recommended.`);
+            }
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Server error: ${response.status}`);
         }
         
         const data = await response.json();
@@ -288,6 +321,8 @@ async function processAudio() {
     } catch (error) {
         console.error('Process error:', error);
         showDetailedError(error, 'Processing');
+    } finally {
+        isProcessing = false;
     }
 }
 
@@ -370,6 +405,7 @@ function resetApp() {
     
     uploadedAudio = null;
     processedAudio = null;
+    isProcessing = false;
     
     // Reset filter
     currentFilter = 'lowpass';
@@ -407,7 +443,7 @@ function drawEmpty(canvas) {
     ctx.font = '14px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Click Upload to begin', width / 2, height / 2);
+    ctx.fillText(`Click Upload (max ${MAX_DURATION}s)`, width / 2, height / 2);
 }
 
 function drawWaveform(data, color) {
@@ -453,10 +489,15 @@ function drawWaveform(data, color) {
     
     if (color === '#48bb78' && uploadedAudio) {
         ctx.fillText(`Original: ${uploadedAudio.duration.toFixed(2)}s`, 10, 20);
+        if (uploadedAudio.isTruncated) {
+            ctx.fillStyle = '#f56565';
+            ctx.fillText(`(truncated)`, 10, 40);
+        }
     } else if (color === '#667eea' && processedAudio) {
         ctx.fillText(`Processed: ${currentFilter}`, 10, 20);
         const cutoff = document.getElementById('cutoffFreq');
         if (cutoff) ctx.fillText(`Cutoff: ${cutoff.value}Hz`, 10, 40);
+        ctx.fillText(`Duration: ${processedAudio.duration.toFixed(2)}s`, 10, 60);
     }
 }
 
@@ -491,13 +532,15 @@ function showNotification(text, isError = false) {
         font-size: 14px;
         z-index: 10000;
         box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        max-width: 300px;
+        word-wrap: break-word;
     `;
     
     document.body.appendChild(notif);
     
     setTimeout(() => {
         if (notif.parentNode) notif.remove();
-    }, 3000);
+    }, 4000);
 }
 
 function showDetailedError(error, context) {
@@ -505,30 +548,30 @@ function showDetailedError(error, context) {
     
     let message = error.message || 'Unknown error';
     
-    if (message.includes('detached ArrayBuffer')) {
+    if (message.includes('413') || message.includes('too large')) {
+        message = `Audio file too large. Please use files under ${MAX_DURATION} seconds.`;
+    } else if (message.includes('detached ArrayBuffer')) {
         message = 'Audio processing error. Please try uploading again.';
     } else if (message.includes('NetworkError') || message.includes('fetch')) {
         message = 'Network error. Check connection and try again.';
-    } else if (message.includes('404')) {
-        message = 'Server not responding. Please try again.';
+    } else if (message.includes('400') && message.includes('NO_AUDIO_DATA')) {
+        message = 'Audio data was lost. Please upload again.';
+        // Reset audio data
+        uploadedAudio = null;
+        processedAudio = null;
     }
     
-    showMessage(`${context} failed: ${message}`, true);
+    showMessage(message, true);
 }
 
 // Debug helper
 window.debug = {
-    upload: () => {
-        const btn = document.getElementById('uploadBtn');
-        if (btn) btn.click();
-    },
-    userActivation: () => {
-        if (navigator.userActivation) {
-            return {
-                isActive: navigator.userActivation.isActive,
-                hasBeenActive: navigator.userActivation.hasBeenActive
-            };
-        }
-        return 'Not supported';
-    }
+    status: () => ({
+        uploaded: !!uploadedAudio,
+        processed: !!processedAudio,
+        filter: currentFilter,
+        duration: uploadedAudio?.duration,
+        truncated: uploadedAudio?.isTruncated
+    }),
+    reset: resetApp
 };
