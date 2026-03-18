@@ -1079,3 +1079,60 @@ input:checked + .slider:before {
     border: none;
     outline: 1px solid #333;
 }
+
+/* Progress Bar */
+.progress-container {
+    width: 100%;
+    height: 4px;
+    background: #333;
+    border-radius: 2px;
+    margin: 10px 0;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #48bb78, #667eea);
+    width: 0%;
+    transition: width 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.3),
+        transparent
+    );
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+/* Processing indicator */
+.processing-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid #48bb78;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-right: 8px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
