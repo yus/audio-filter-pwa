@@ -1,4 +1,4 @@
-// Audio Filter - COMPLETE WORKING VERSION (Firefox Compatible)
+// Audio Filter - COMPLETE WORKING VERSION (Using userActivation API)
 console.log('Audio Filter LOADING...');
 
 let uploadedAudio = null;
@@ -6,9 +6,6 @@ let processedAudio = null;
 let audioContext = null;
 let sourceNode = null;
 let currentFilter = 'lowpass';
-let isFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
-
-console.log('Browser:', isFirefox ? 'Firefox' : 'Other');
 
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', function() {
@@ -26,64 +23,50 @@ function setupUI() {
     const stopBtn = document.getElementById('stopBtn');
     const resetBtn = document.getElementById('resetBtn');
     
-    // Setup upload button - Firefox needs special handling
+    // Setup upload button with proper user activation handling
     if (uploadBtn) {
-        // Remove any existing listeners
         const newUploadBtn = uploadBtn.cloneNode(true);
         uploadBtn.parentNode.replaceChild(newUploadBtn, uploadBtn);
         
         newUploadBtn.addEventListener('click', function(e) {
             e.preventDefault();
-            e.stopPropagation();
-            console.log('Upload clicked - Firefox:', isFirefox);
             
-            // Firefox needs the input to be created AND clicked in the same event cycle
-            if (isFirefox) {
-                // Firefox fix: create input and click immediately
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = 'audio/*';
-                input.style.position = 'fixed';
-                input.style.top = '-100px';
-                input.style.left = '-100px';
-                
-                input.onchange = function(event) {
-                    const file = event.target.files[0];
-                    if (file) {
-                        console.log('File selected in Firefox:', file.name);
-                        handleSelectedFile(file);
-                    }
-                    // Clean up
-                    setTimeout(() => {
-                        if (input.parentNode) input.remove();
-                    }, 100);
-                };
-                
-                document.body.appendChild(input);
-                // Use setTimeout to ensure DOM is ready
-                setTimeout(() => {
-                    input.click();
-                }, 10);
-            } else {
-                // Chrome/Edge/Safari - simpler approach
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = 'audio/*';
-                input.style.display = 'none';
-                
-                input.onchange = function(event) {
-                    const file = event.target.files[0];
-                    if (file) {
-                        handleSelectedFile(file);
-                    }
-                    if (input.parentNode) input.remove();
-                };
-                
-                document.body.appendChild(input);
-                input.click();
+            // Check if we have user activation
+            if (navigator.userActivation && !navigator.userActivation.isActive) {
+                console.log('Waiting for user activation...');
+                // Still allow the file picker - it will trigger activation
             }
+            
+            console.log('Upload clicked - has user activation:', 
+                       navigator.userActivation?.isActive);
+            
+            // Create file input directly in click handler
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'audio/*';
+            fileInput.style.position = 'fixed';
+            fileInput.style.top = '0';
+            fileInput.style.left = '0';
+            fileInput.style.opacity = '0';
+            fileInput.style.pointerEvents = 'none';
+            
+            fileInput.onchange = function(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    handleSelectedFile(file);
+                }
+                // Clean up
+                setTimeout(() => {
+                    if (fileInput.parentNode) {
+                        fileInput.parentNode.removeChild(fileInput);
+                    }
+                }, 100);
+            };
+            
+            document.body.appendChild(fileInput);
+            fileInput.click();
         });
-        console.log('Upload button setup OK (Firefox compatible)');
+        console.log('Upload button setup OK');
     }
     
     // Setup process button
@@ -94,7 +77,6 @@ function setupUI() {
             e.preventDefault();
             processAudio();
         });
-        console.log('Process button setup OK');
     }
     
     // Setup play button
@@ -105,7 +87,6 @@ function setupUI() {
             e.preventDefault();
             playAudio();
         });
-        console.log('Play button setup OK');
     }
     
     // Setup stop button
@@ -116,7 +97,6 @@ function setupUI() {
             e.preventDefault();
             stopAudio();
         });
-        console.log('Stop button setup OK');
     }
     
     // Setup reset button
@@ -127,7 +107,6 @@ function setupUI() {
             e.preventDefault();
             resetApp();
         });
-        console.log('Reset button setup OK');
     }
     
     // Setup filter buttons
@@ -142,25 +121,18 @@ function setupUI() {
         canvas.width = canvas.offsetWidth;
         canvas.height = canvas.offsetHeight;
         drawEmpty(canvas);
-        
-        // Handle resize
-        window.addEventListener('resize', function() {
-            canvas.width = canvas.offsetWidth;
-            canvas.height = canvas.offsetHeight;
-            if (uploadedAudio) {
-                if (processedAudio) {
-                    drawWaveform(processedAudio.data, '#667eea');
-                } else {
-                    drawWaveform(uploadedAudio.data, '#48bb78');
-                }
-            } else {
-                drawEmpty(canvas);
-            }
-        });
     }
     
     showMessage('Ready - Click Upload to begin');
     console.log('Setup complete');
+    
+    // Log user activation status
+    if (navigator.userActivation) {
+        console.log('User activation API supported');
+        console.log('Has ever been active:', navigator.userActivation.hasBeenActive);
+    } else {
+        console.log('User activation API not supported (older browser)');
+    }
 }
 
 function setupFilterButtons() {
@@ -208,7 +180,7 @@ function setupCutoffSlider() {
 }
 
 async function handleSelectedFile(file) {
-    console.log('Processing file:', file.name, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
+    console.log('Processing file:', file.name);
     showMessage('Loading audio...');
     
     try {
@@ -550,10 +522,13 @@ window.debug = {
         const btn = document.getElementById('uploadBtn');
         if (btn) btn.click();
     },
-    status: () => ({
-        uploaded: !!uploadedAudio,
-        processed: !!processedAudio,
-        filter: currentFilter,
-        firefox: isFirefox
-    })
+    userActivation: () => {
+        if (navigator.userActivation) {
+            return {
+                isActive: navigator.userActivation.isActive,
+                hasBeenActive: navigator.userActivation.hasBeenActive
+            };
+        }
+        return 'Not supported';
+    }
 };
