@@ -143,30 +143,30 @@
 </head>
 <body>
     <div class="container">
-        <h1>Audio Filter</h1>
+        <h1>AF</h1>
         
         <div class="panel">
             <h3>FILTER</h3>
-            <div class="btn-group">
-                <!-- Toolbar -->
-                <div class="toolbar">
-                    <button id="undoBtn" data-tooltip="Undo (Ctrl+Z)">↩ Undo</button>
-                    <button id="redoBtn" data-tooltip="Redo (Ctrl+Y)">↪ Redo</button>
-                    <button id="zoomInBtn" data-tooltip="Zoom In (+)">🔍+</button>
-                    <button id="zoomOutBtn" data-tooltip="Zoom Out (-)">🔍-</button>
-                    <button id="fitViewBtn" data-tooltip="Fit View (0)">⊞ Fit</button>
-                </div>
-                
-                <!-- Filter Tabs -->
-                <div id="filterTabs" class="filter-tabs"></div>
-                
-                <!-- Filter Controls -->
-                <div id="filterControls"></div>
-                
-                <!-- Filter Response -->
-                <canvas id="filterResponse" class="filter-response" width="800" height="80"></canvas>
+            <div class="btn-group"></div>
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <button id="undoBtn" data-tooltip="Undo (Ctrl+Z)">↩ Undo</button>
+                <button id="redoBtn" data-tooltip="Redo (Ctrl+Y)">↪ Redo</button>
+                <button id="zoomInBtn" data-tooltip="Zoom In (+)">🔍+</button>
+                <button id="zoomOutBtn" data-tooltip="Zoom Out (-)">🔍-</button>
+                <button id="fitViewBtn" data-tooltip="Fit View (0)">⊞ Fit</button>
             </div>
             
+            <!-- Filter Tabs -->
+            <div id="filterTabs" class="filter-tabs"></div>
+            
+            <!-- Filter Controls -->
+            <div id="filterControls"></div>
+            
+            <!-- Filter Response -->
+            <canvas id="filterResponse" class="filter-response" width="800" height="80"></canvas>
+            
+            <!-- Keep cutoff slider separate -->
             <div class="slider-group">
                 <label>Cutoff Frequency: <span id="cutoffValue">1000</span> Hz</label>
                 <input type="range" id="cutoffFreq" min="20" max="20000" step="10" value="1000">
@@ -179,6 +179,10 @@
                 <canvas id="waveVisualizer" width="800" height="200"></canvas>
             </div>
             <div id="status" class="status-bar" style="margin: 5px; padding: 5px; border-radius: 4px; background: #2a2a2a; min-height: 40px;"></div>
+            <!-- Progress Bar Container -->
+            <div class="progress-container" id="progressContainer" style="display: none;">
+                <div class="progress-bar" id="progressBar" style="width: 0%;"></div>
+            </div>
         </div>
         
         <div class="panel">
