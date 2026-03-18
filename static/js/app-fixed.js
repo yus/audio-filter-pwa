@@ -454,6 +454,10 @@ class AudioFilterPro {
         }
     }
     
+    // Add to your AudioFilterPro class - optimized chunk processing
+
+    // Replace your existing processAudio method with this optimized version:
+    
     async processAudio() {
         if (!this.uploadedAudio) {
             this.showMessage('Please upload audio first', true);
@@ -468,40 +472,72 @@ class AudioFilterPro {
         try {
             const audioData = this.uploadedAudio.data;
             
-            // Process in chunks to avoid memory issues
+            // OPTIMIZATION 1: Adaptive chunk sizing based on file length
+            // Use larger chunks for long files to reduce number of pauses
+            const totalDuration = audioData.length / this.uploadedAudio.sampleRate;
+            let chunkSize = this.CHUNK_SIZE;
+            
+            if (totalDuration > 300) { // > 5 minutes
+                chunkSize = 44100 * 30; // 30-second chunks for very long files
+            } else if (totalDuration > 120) { // > 2 minutes
+                chunkSize = 44100 * 20; // 20-second chunks
+            }
+            
+            // Create chunks with adaptive size
             const chunks = [];
-            for (let i = 0; i < audioData.length; i += this.CHUNK_SIZE) {
-                const chunk = audioData.slice(i, Math.min(i + this.CHUNK_SIZE, audioData.length));
+            for (let i = 0; i < audioData.length; i += chunkSize) {
+                const chunk = audioData.slice(i, Math.min(i + chunkSize, audioData.length));
                 chunks.push(chunk);
             }
             
-            console.log(`Processing ${chunks.length} chunks...`);
+            console.log(`Processing ${chunks.length} chunks (${chunkSize/44100}s each)...`);
             
             // Get enabled filters
             const activeFilters = Object.values(this.filters).filter(f => f.enabled);
             
-            // Process each chunk
+            // OPTIMIZATION 2: Parallel processing with controlled concurrency
             const processedChunks = [];
-            for (let i = 0; i < chunks.length; i++) {
-                const chunk = chunks[i];
-                const chunkArray = Array.from(chunk);
+            const concurrencyLimit = 3; // Process up to 3 chunks simultaneously
+            
+            for (let i = 0; i < chunks.length; i += concurrencyLimit) {
+                const batch = chunks.slice(i, Math.min(i + concurrencyLimit, chunks.length));
                 
-                // Apply filters in sequence
-                let processedChunk = chunkArray;
-                for (const filter of activeFilters) {
-                    processedChunk = await this.applyFilter(processedChunk, filter);
-                }
+                // Process batch in parallel
+                const batchResults = await Promise.all(
+                    batch.map(async (chunk, index) => {
+                        const chunkArray = Array.from(chunk);
+                        let processedChunk = chunkArray;
+                        
+                        for (const filter of activeFilters) {
+                            processedChunk = await this.applyFilter(processedChunk, filter);
+                        }
+                        
+                        // Update progress less frequently to reduce UI thrashing
+                        if ((i + index) % 5 === 0) {
+                            const percent = Math.round(((i + index) / chunks.length) * 100);
+                            this.showMessage(`Processing: ${percent}%`);
+                        }
+                        
+                        return processedChunk;
+                    })
+                );
                 
-                processedChunks.push(processedChunk);
+                processedChunks.push(...batchResults);
                 
-                // Update progress
-                if (i % 5 === 0) {
-                    this.showMessage(`Processing: ${Math.round((i/chunks.length)*100)}%`);
-                }
+                // Small delay between batches to keep UI responsive
+                await new Promise(resolve => setTimeout(resolve, 10));
             }
             
-            // Combine chunks
-            const combined = [].concat(...processedChunks);
+            // OPTIMIZATION 3: Efficient chunk combination
+            // Pre-allocate combined array for better performance
+            const totalLength = processedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+            const combined = new Float32Array(totalLength);
+            
+            let offset = 0;
+            for (const chunk of processedChunks) {
+                combined.set(chunk, offset);
+                offset += chunk.length;
+            }
             
             this.processedAudio = {
                 data: combined,
@@ -518,6 +554,88 @@ class AudioFilterPro {
         } finally {
             this.isProcessing = false;
         }
+    }
+
+    // OPTIMIZATION 4: Add a progress bar for visual feedback
+    addProgressBar() {
+        // Check if progress bar exists
+        let progressBar = document.getElementById('progressBar');
+        if (!progressBar) {
+            progressBar = document.createElement('div');
+            progressBar.id = 'progressBar';
+            progressBar.style.cssText = `
+                width: 100%;
+                height: 4px;
+                background: #333;
+                border-radius: 2px;
+                margin: 5px 0;
+                overflow: hidden;
+                display: none;
+            `;
+            
+            const progressFill = document.createElement('div');
+            progressFill.id = 'progressFill';
+            progressFill.style.cssText = `
+                width: 0%;
+                height: 100%;
+                background: linear-gradient(90deg, #48bb78, #667eea);
+                transition: width 0.2s;
+            `;
+            
+            progressBar.appendChild(progressFill);
+            
+            // Insert after status
+            const statusEl = document.getElementById('status');
+            if (statusEl && statusEl.parentNode) {
+                statusEl.parentNode.insertBefore(progressBar, statusEl.nextSibling);
+            }
+        }
+        return progressBar;
+    }
+    
+    // Update showMessage to handle progress
+    showMessage(text, isError = false, progress = null) {
+        console.log(isError ? 'ERROR:' : 'INFO:', text);
+        
+        if (this.statusEl) {
+            this.statusEl.textContent = text;
+            this.statusEl.style.color = isError ? '#f56565' : '#48bb78';
+        }
+        
+        // Handle progress bar
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+        
+        if (progress !== null && progressBar && progressFill) {
+            progressBar.style.display = 'block';
+            progressFill.style.width = progress + '%';
+        } else if (progressBar) {
+            progressBar.style.display = 'none';
+        }
+    }
+
+    // OPTIMIZATION 5: Web Worker for background processing (optional but powerful)
+    // Add this method to create a processing worker
+    createProcessingWorker() {
+        const workerCode = `
+            self.onmessage = function(e) {
+                const { chunk, filterType, freq } = e.data;
+                
+                // Simple filter simulation - replace with actual filter logic
+                const processed = chunk.map((sample, i) => {
+                    if (filterType === 'lowpass') {
+                        const f = freq / 20000;
+                        return sample * (1 - Math.min(1, i * f / 1000));
+                    }
+                    return sample;
+                });
+                
+                self.postMessage({ processed });
+            };
+        `;
+        
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        return new Worker(URL.createObjectURL(blob));
     }
     
     async applyFilter(audioData, filter) {
